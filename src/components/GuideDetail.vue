@@ -1,5 +1,5 @@
 <template>
-  <div class="guide-detail-page">
+  <div class="guide-detail-page"> 
     <div class="container">
       <!-- 返回按钮 -->
       <div class="back-section">
