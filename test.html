@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API 测试</title>
+    <style>
+        body { font-family: Arial; padding: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; }
+        button { padding: 10px; margin: 5px; }
+        pre { background: #f5f5f5; padding: 10px; }
+    </style>
+</head>
+<body>
+    <h1>API 连接测试</h1>
+    
+    <div class="test-section">
+        <h3>1. 健康检查</h3>
+        <button onclick="testHealth()">测试健康检查</button>
+        <div id="health-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>2. 登录测试</h3>
+        <input type="email" id="email" placeholder="邮箱" value="test@example.com">
+        <input type="password" id="password" placeholder="密码" value="123456">
+        <button onclick="testLogin()">测试登录</button>
+        <div id="login-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>3. 注册测试</h3>
+        <input type="text" id="username" placeholder="用户名" value="newuser">
+        <input type="email" id="new-email" placeholder="邮箱" value="new@example.com">
+        <input type="password" id="new-password" placeholder="密码" value="123456">
+        <button onclick="testRegister()">测试注册</button>
+        <div id="register-result"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:3000/api';
+        
+        async function testHealth() {
+            try {
+                const response = await fetch(`${API_BASE}/health`);
+                const data = await response.json();
+                document.getElementById('health-result').innerHTML = `
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                document.getElementById('health-result').innerHTML = `错误: ${error.message}`;
+            }
+        }
+
+        async function testLogin() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            try {
+                const response = await fetch(`${API_BASE}/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                
+                const data = await response.json();
+                document.getElementById('login-result').innerHTML = `
+                    <p>状态: ${response.status}</p>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                document.getElementById('login-result').innerHTML = `错误: ${error.message}`;
+            }
+        }
+
+        async function testRegister() {
+            const username = document.getElementById('username').value;
+            const email = document.getElementById('new-email').value;
+            const password = document.getElementById('new-password').value;
+            
+            try {
+                const response = await fetch(`${API_BASE}/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, email, password })
+                });
+                
+                const data = await response.json();
+                document.getElementById('register-result').innerHTML = `
+                    <p>状态: ${response.status}</p>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                document.getElementById('register-result').innerHTML = `错误: ${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html>
