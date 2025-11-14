@@ -1,4 +1,4 @@
-<template> 
+<template>
   <div class="home">
     <!-- 轮播图区域 -->
     <section class="banner-section">
@@ -104,21 +104,65 @@
             v-for="guide in guides" 
             :key="guide.id" 
             class="guide-card"
+            :class="getCardAnimationClass(guide)"
           >
+            <!-- 图片容器 - 优化版 -->
             <div class="card-image-container">
-              <img 
-                :src="getGuideImage(guide)" 
-                :alt="guide.title" 
-                class="card-img"
-                @error="handleImageError"
-                @click="viewGuideDetail(guide.id)"
-              >
+              <div class="image-wrapper">
+                <img 
+                  :src="getGuideImage(guide)" 
+                  :alt="guide.title" 
+                  :class="['card-img', getImageClass(guide)]"
+                  @load="handleImageLoad(guide)"
+                  @error="handleImageError"
+                  @click="viewGuideDetail(guide.id)"
+                />
+                <!-- 图片加载状态 -->
+                <div v-if="guide.imageLoading" class="image-loading">
+                  <div class="loading-spinner"></div>
+                </div>
+                <!-- 图片错误状态 -->
+                <div v-else-if="guide.imageError" class="image-error">
+                  <span>🖼️</span>
+                  <p>图片加载失败</p>
+                </div>
+              </div>
+              
+              <!-- 图片悬停效果层 -->
               <div class="image-overlay">
-                <button class="btn-overlay" @click="viewGuideDetail(guide.id)">
-                  查看详情
-                </button>
+                <div class="overlay-content">
+                  <button class="btn-overlay" @click="viewGuideDetail(guide.id)">
+                    <span class="btn-icon">👁️</span>
+                    <span class="btn-text">查看详情</span>
+                  </button>
+                  <div class="quick-actions">
+                    <button 
+                      class="quick-btn like-quick"
+                      :class="{ 'liked': guide.liked }"
+                      @click.stop="toggleLike(guide)"
+                      :disabled="guide.likeLoading"
+                    >
+                      ❤️
+                    </button>
+                    <button 
+                      class="quick-btn favorite-quick"
+                      :class="{ 'favorited': guide.favorited }"
+                      @click.stop="toggleFavorite(guide)"
+                      :disabled="guide.favoriteLoading"
+                    >
+                      ⭐
+                    </button>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- 图片类型指示器 -->
+              <div v-if="guide.imageInfo && !guide.imageLoading && !guide.imageError" class="image-info">
+                <span class="image-type">{{ guide.imageInfo.type }}</span>
+                <span class="image-dimensions">{{ guide.imageInfo.dimensions }}</span>
               </div>
             </div>
+
             <div class="card-body">
               <div class="guide-meta">
                 <span class="region-tag" :class="guide.region === '日本' ? 'japan' : 'china'">
@@ -128,6 +172,8 @@
               </div>
               <h3 class="card-title" @click="viewGuideDetail(guide.id)">{{ guide.title || '未命名攻略' }}</h3>
               <p class="card-text">{{ getGuideContent(guide) }}</p>
+              
+              <!-- 统计信息 -->
               <div class="guide-stats">
                 <span class="stat-item">
                   <span class="stat-icon">👁️</span>
@@ -152,6 +198,8 @@
                   <span class="btn-count">{{ guide.favorites || 0 }}</span>
                 </button>
               </div>
+              
+              <!-- 作者信息 -->
               <div class="author-info">
                 <div class="author-avatar-container">
                   <img :src="guide.avatar || '/images/f.jpg'" :alt="guide.username" class="author-avatar">
@@ -172,6 +220,14 @@
                   {{ guide.followLoading ? '...' : (guide.following ? '已关注' : '关注') }}
                 </button>
               </div>
+            </div>
+            
+            <!-- 卡片装饰元素 -->
+            <div class="card-decoration">
+              <div class="decoration-corner top-left"></div>
+              <div class="decoration-corner top-right"></div>
+              <div class="decoration-corner bottom-left"></div>
+              <div class="decoration-corner bottom-right"></div>
             </div>
           </div>
         </div>
@@ -221,7 +277,6 @@
 </template>
 
 <script>
-// 脚本部分保持不变，与之前相同
 export default {
   name: 'Home',
   inject: ['$api'],
@@ -315,11 +370,52 @@ export default {
       return guide.cover_image_url || guide.image_url || '/images/f.jpg';
     },
 
+    // 获取图片类名
+    getImageClass(guide) {
+      if (!guide.imageInfo) return 'image-standard';
+      
+      const ratio = guide.imageInfo.ratio;
+      
+      if (ratio < 0.7) {
+        return 'image-portrait';
+      } else if (ratio > 1.5) {
+        return 'image-landscape';
+      } else if (guide.imageInfo.width < 400) {
+        return 'image-small';
+      } else {
+        return 'image-standard';
+      }
+    },
+
+    // 处理图片加载
+    handleImageLoad(guide) {
+      const img = event.target;
+      const width = img.naturalWidth;
+      const height = img.naturalHeight;
+      const ratio = width / height;
+      
+      guide.imageLoading = false;
+      guide.imageError = false;
+      guide.imageInfo = {
+        width,
+        height,
+        ratio,
+        type: ratio < 0.7 ? '竖版' : ratio > 1.5 ? '宽版' : '方版',
+        dimensions: `${width} × ${height}`
+      };
+    },
+
     // 获取攻略内容摘要
     getGuideContent(guide) {
       const content = guide.content || '';
       const cleanContent = content.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
       return cleanContent.substring(0, 100) + (cleanContent.length > 100 ? '...' : '');
+    },
+
+    // 获取卡片动画类名
+    getCardAnimationClass(guide) {
+      const index = this.guides.indexOf(guide);
+      return `card-${index % 4}`; // 4种不同的动画效果
     },
     
     // 攻略相关方法
@@ -364,7 +460,10 @@ export default {
                   favoriteAnimating: false,
                   following: followStatus.following,
                   followLoading: false,
-                  fans_count: userStats.fans_count
+                  fans_count: userStats.fans_count,
+                  imageLoading: true,
+                  imageError: false,
+                  imageInfo: null
                 }
               } catch (error) {
                 console.error('获取状态失败:', error)
@@ -378,7 +477,10 @@ export default {
                   favoriteAnimating: false,
                   following: false,
                   followLoading: false,
-                  fans_count: 0
+                  fans_count: 0,
+                  imageLoading: true,
+                  imageError: false,
+                  imageInfo: null
                 }
               }
             })
@@ -607,21 +709,25 @@ export default {
     
     handleImageError(event) {
       console.log('图片加载失败:', event.target.src)
-      event.target.src = '/images/f.jpg'
+      const guide = this.guides.find(g => this.getGuideImage(g) === event.target.src);
+      if (guide) {
+        guide.imageLoading = false;
+        guide.imageError = true;
+      }
+      event.target.src = '/images/f.jpg';
     }
   }
 }
 </script>
 
 <style scoped>
-/* 优化后的样式 */
+/* 首页整体样式 */
 .home {
   min-height: 100vh;
   background: linear-gradient(135deg, #f8fbff 0%, #f1f2f6 100%);
 }
 
-/* 轮播图样式优化 */
-/* 轮播图样式优化 */
+/* 轮播图样式保持不变 */
 .banner-section {
   margin-bottom: 50px;
   position: relative;
@@ -710,7 +816,7 @@ export default {
   line-height: 1.5;
 }
 
-/* 轮播图控制按钮优化 */
+/* 轮播图控制按钮 */
 .carousel-control {
   position: absolute;
   top: 50%;
@@ -748,11 +854,7 @@ export default {
   right: 30px;
 }
 
-.carousel-control:active {
-  transform: translateY(-50%) scale(0.95);
-}
-
-/* 轮播图指示器优化 */
+/* 轮播图指示器 */
 .carousel-indicators {
   position: absolute;
   bottom: 25px;
@@ -787,286 +889,16 @@ export default {
   border-radius: 50%;
 }
 
+.carousel-indicators button.active::before {
+  left: 0;
+}
+
 .carousel-indicators button.active {
   border-color: white;
   transform: scale(1.2);
 }
 
-.carousel-indicators button.active::before {
-  left: 0;
-}
-
-.carousel-indicators button:hover {
-  border-color: rgba(255, 255, 255, 0.9);
-  transform: scale(1.1);
-}
-
-/* 轮播图进度条 */
-.carousel-progress {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  height: 4px;
-  background: rgba(255, 255, 255, 0.2);
-  z-index: 10;
-}
-
-.carousel-progress-bar {
-  height: 100%;
-  background: linear-gradient(90deg, #3498db, #9b59b6);
-  width: 0%;
-  transition: width 5s linear;
-  border-radius: 0 2px 2px 0;
-}
-
-.carousel-item.active .carousel-progress-bar {
-  width: 100%;
-}
-
-/* 轮播图导航点动画 */
-@keyframes slideInUp {
-  from {
-    opacity: 0;
-    transform: translateY(30px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes zoomIn {
-  from {
-    opacity: 0;
-    transform: scale(1.1);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-.carousel-item.active .carousel-img {
-  animation: zoomIn 1.2s ease-out;
-}
-
-.carousel-item.active .carousel-caption h2 {
-  animation: slideInUp 0.8s ease-out 0.4s both;
-}
-
-.carousel-item.active .carousel-caption p {
-  animation: slideInUp 0.8s ease-out 0.6s both;
-}
-
-/* 响应式设计优化 */
-@media (max-width: 1200px) {
-  .carousel {
-    height: 450px;
-  }
-  
-  .carousel-caption h2 {
-    font-size: 2.8em;
-  }
-  
-  .carousel-caption p {
-    font-size: 1.3em;
-  }
-}
-
-@media (max-width: 768px) {
-  .carousel {
-    height: 350px;
-    border-radius: 15px;
-  }
-  
-  .carousel-caption {
-    padding: 30px 25px;
-  }
-  
-  .carousel-caption h2 {
-    font-size: 2.2em;
-    margin-bottom: 10px;
-  }
-  
-  .carousel-caption p {
-    font-size: 1.1em;
-  }
-  
-  .carousel-control {
-    width: 50px;
-    height: 50px;
-    font-size: 22px;
-  }
-  
-  .carousel-control.prev {
-    left: 15px;
-  }
-  
-  .carousel-control.next {
-    right: 15px;
-  }
-  
-  .carousel-indicators {
-    bottom: 20px;
-  }
-  
-  .carousel-indicators button {
-    width: 12px;
-    height: 12px;
-  }
-}
-
-@media (max-width: 480px) {
-  .carousel {
-    height: 280px;
-    border-radius: 12px;
-  }
-  
-  .carousel-caption {
-    padding: 20px 15px;
-  }
-  
-  .carousel-caption h2 {
-    font-size: 1.8em;
-  }
-  
-  .carousel-caption p {
-    font-size: 0.95em;
-  }
-  
-  .carousel-control {
-    width: 40px;
-    height: 40px;
-    font-size: 18px;
-  }
-  
-  .carousel-control.prev {
-    left: 10px;
-  }
-  
-  .carousel-control.next {
-    right: 10px;
-  }
-  
-  .carousel-indicators {
-    bottom: 15px;
-    gap: 8px;
-  }
-  
-  .carousel-indicators button {
-    width: 10px;
-    height: 10px;
-  }
-}
-
-/* 深色模式支持 */
-@media (prefers-color-scheme: dark) {
-  .carousel {
-    background: linear-gradient(135deg, #0d1b2a, #1a2a3a);
-  }
-  
-  .carousel-control {
-    background: rgba(0, 0, 0, 0.3);
-    border-color: rgba(255, 255, 255, 0.2);
-  }
-  
-  .carousel-control:hover {
-    background: rgba(0, 0, 0, 0.5);
-    border-color: rgba(255, 255, 255, 0.4);
-  }
-}
-
-/* 无障碍支持 */
-.carousel-control:focus {
-  outline: 2px solid #3498db;
-  outline-offset: 2px;
-}
-
-.carousel-indicators button:focus {
-  outline: 2px solid #3498db;
-  outline-offset: 2px;
-}
-
-/* 加载状态 */
-.carousel-loading {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 40px;
-  height: 40px;
-  border: 3px solid rgba(255, 255, 255, 0.3);
-  border-top: 3px solid #3498db;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  z-index: 5;
-}
-
-/* 触摸设备优化 */
-@media (hover: none) and (pointer: coarse) {
-  .carousel-control {
-    background: rgba(255, 255, 255, 0.25);
-    border-color: rgba(255, 255, 255, 0.4);
-    opacity: 1;
-  }
-  
-  .carousel-indicators button {
-    width: 16px;
-    height: 16px;
-  }
-}
-
-/* 高性能动画优化 */
-.carousel-inner {
-  will-change: transform;
-}
-
-.carousel-img {
-  will-change: transform;
-}
-
-.carousel-caption {
-  will-change: transform, opacity;
-}
-
-/* 打印样式 */
-@media print {
-  .carousel-control,
-  .carousel-indicators,
-  .carousel-progress {
-    display: none;
-  }
-  
-  .carousel {
-    height: auto;
-    box-shadow: none;
-    border: 1px solid #ddd;
-  }
-  
-  .carousel-img {
-    filter: none !important;
-    transform: none !important;
-  }
-  
-  .carousel-caption {
-    position: static;
-    background: none;
-    color: black;
-    padding: 20px;
-    transform: none !important;
-    opacity: 1 !important;
-  }
-  
-  .carousel-caption h2 {
-    background: none;
-    -webkit-text-fill-color: black;
-    color: black;
-    text-shadow: none;
-  }
-}
-
-/* 搜索区域样式优化 */
+/* 搜索区域样式 */
 .search-section {
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(10px);
@@ -1155,118 +987,342 @@ export default {
 
 .section-title {
   text-align: center;
-  margin-bottom: 40px;
+  margin-bottom: 50px;
   color: #2c3e50;
-  font-size: 2.5em;
+  font-size: 2.8em;
   font-weight: 800;
-  background: linear-gradient(135deg, #3498db, #9b59b6);
+  background: linear-gradient(135deg, #3498db, #9b59b6, #e74c3c);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  background-size: 200% auto;
+  animation: shimmer 3s ease-in-out infinite;
+  position: relative;
+  padding-bottom: 15px;
+}
+
+.section-title::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100px;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, #3498db, transparent);
+  border-radius: 2px;
+}
+
+@keyframes shimmer {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
 }
 
 .guides-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
-  gap: 30px;
+  gap: 35px;
   margin-bottom: 50px;
 }
 
+/* 攻略卡片样式优化 */
 .guide-card {
   background: white;
-  border-radius: 20px;
+  border-radius: 24px;
   overflow: hidden;
-  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  box-shadow: 
+    0 8px 30px rgba(0, 0, 0, 0.08),
+    0 2px 8px rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.3);
   position: relative;
+  opacity: 0;
+  transform: translateY(30px);
+  animation: cardSlideIn 0.6s ease forwards;
+}
+
+/* 卡片动画序列 */
+.guide-card.card-0 { animation-delay: 0.1s; }
+.guide-card.card-1 { animation-delay: 0.2s; }
+.guide-card.card-2 { animation-delay: 0.3s; }
+.guide-card.card-3 { animation-delay: 0.4s; }
+
+@keyframes cardSlideIn {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .guide-card:hover {
-  transform: translateY(-8px);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+  transform: translateY(-12px) scale(1.02);
+  box-shadow: 
+    0 25px 60px rgba(0, 0, 0, 0.15),
+    0 10px 30px rgba(52, 152, 219, 0.1);
 }
 
 /* 图片容器优化 */
 .card-image-container {
   position: relative;
   width: 100%;
-  height: 240px;
+  height: 260px;
   overflow: hidden;
+  background: linear-gradient(135deg, #f8f9fa, #e9ecef);
 }
 
-.card-img {
+.image-wrapper {
+  position: relative;
   width: 100%;
   height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 图片自适应样式 */
+.card-img {
+  transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  display: block;
+  border-radius: 0;
+  background: white;
+}
+
+/* 不同图片类型的自适应样式 */
+.card-img.image-standard {
+  max-height: 100%;
+  max-width: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+
+.card-img.image-portrait {
+  max-height: 100%;
+  max-width: 80%;
+  height: auto;
+  width: auto;
+  object-fit: contain;
+}
+
+.card-img.image-landscape {
+  max-height: 100%;
+  width: 100%;
+  height: auto;
   object-fit: cover;
-  transition: all 0.5s ease;
+}
+
+.card-img.image-small {
+  max-width: 60%;
+  max-height: 80%;
+  height: auto;
+  width: auto;
+  object-fit: contain;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
 }
 
 .guide-card:hover .card-img {
-  transform: scale(1.1);
+  transform: scale(1.08);
 }
 
+/* 图片加载状态 */
+.image-loading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(248, 249, 250, 0.9);
+  z-index: 2;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid #3498db;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* 图片错误状态 */
+.image-error {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+  color: #95a5a6;
+  gap: 10px;
+  z-index: 2;
+}
+
+.image-error span {
+  font-size: 48px;
+  opacity: 0.5;
+}
+
+.image-error p {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* 图片悬停效果层 */
 .image-overlay {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(to bottom, transparent 60%, rgba(0,0,0,0.7));
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.3) 0%,
+    rgba(0, 0, 0, 0.1) 30%,
+    rgba(0, 0, 0, 0.7) 100%
+  );
   opacity: 0;
-  transition: all 0.3s ease;
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  padding: 20px;
+  padding: 25px;
+  z-index: 3;
 }
 
 .guide-card:hover .image-overlay {
   opacity: 1;
 }
 
-.btn-overlay {
-  background: rgba(255, 255, 255, 0.9);
-  color: #2c3e50;
-  border: none;
-  padding: 10px 20px;
-  border-radius: 25px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s ease;
+.overlay-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px;
+  width: 100%;
   transform: translateY(20px);
+  transition: transform 0.4s ease 0.1s;
 }
 
-.guide-card:hover .btn-overlay {
+.guide-card:hover .overlay-content {
   transform: translateY(0);
+}
+
+.btn-overlay {
+  background: rgba(255, 255, 255, 0.95);
+  color: #2c3e50;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 25px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
 }
 
 .btn-overlay:hover {
   background: white;
   transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+}
+
+.quick-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.quick-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  backdrop-filter: blur(10px);
+}
+
+.quick-btn:hover {
+  transform: scale(1.1);
+  border-color: white;
+  background: white;
+}
+
+.quick-btn.liked {
+  background: rgba(255, 107, 107, 0.9);
+  border-color: #ff6b6b;
+  color: white;
+}
+
+.quick-btn.favorited {
+  background: rgba(241, 196, 15, 0.9);
+  border-color: #f1c40f;
+  color: white;
+}
+
+/* 图片信息显示 */
+.image-info {
+  position: absolute;
+  top: 15px;
+  left: 15px;
+  display: flex;
+  gap: 10px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(0, 0, 0, 0.6);
+  padding: 6px 12px;
+  border-radius: 12px;
+  backdrop-filter: blur(5px);
+  z-index: 4;
+}
+
+.image-type, .image-dimensions {
+  font-weight: 600;
 }
 
 /* 卡片内容优化 */
 .card-body {
-  padding: 25px;
+  padding: 28px;
+  position: relative;
+  z-index: 2;
 }
 
 .guide-meta {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
+  gap: 12px;
+  margin-bottom: 15px;
   flex-wrap: wrap;
 }
 
 .region-tag {
-  padding: 6px 14px;
+  padding: 8px 16px;
   border-radius: 20px;
   font-size: 12px;
   font-weight: 700;
   color: white;
   text-shadow: 0 1px 2px rgba(0,0,0,0.2);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  transition: all 0.3s ease;
 }
 
 .region-tag.japan {
@@ -1277,16 +1333,24 @@ export default {
   background: linear-gradient(135deg, #3498db, #2980b9);
 }
 
+.region-tag:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 15px rgba(0,0,0,0.3);
+}
+
 .location {
   color: #666;
   font-size: 14px;
   font-weight: 500;
+  background: #f8f9fa;
+  padding: 6px 12px;
+  border-radius: 15px;
 }
 
 .card-title {
   font-size: 20px;
-  font-weight: 700;
-  margin-bottom: 12px;
+  font-weight: 800;
+  margin-bottom: 15px;
   color: #2c3e50;
   line-height: 1.4;
   cursor: pointer;
@@ -1295,6 +1359,7 @@ export default {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  position: relative;
 }
 
 .card-title:hover {
@@ -1317,8 +1382,8 @@ export default {
   display: flex;
   align-items: center;
   gap: 15px;
-  margin: 20px 0;
-  padding: 15px 0;
+  margin: 25px 0;
+  padding: 20px 0;
   border-top: 1px solid #f0f0f0;
   border-bottom: 1px solid #f0f0f0;
 }
@@ -1342,37 +1407,67 @@ export default {
 .action-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
-  border: 1px solid #e0e0e0;
-  border-radius: 20px;
+  gap: 8px;
+  padding: 10px 16px;
+  border: 2px solid #e0e0e0;
+  border-radius: 25px;
   background: white;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   font-size: 14px;
   color: #666;
+  position: relative;
+  overflow: hidden;
+}
+
+.action-btn::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  background: rgba(0,0,0,0.05);
+  border-radius: 50%;
+  transition: all 0.4s ease;
+  transform: translate(-50%, -50%);
+}
+
+.action-btn:hover::before {
+  width: 100%;
+  height: 100%;
 }
 
 .action-btn:hover {
   background: #f8f9fa;
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.1);
 }
 
 .action-btn.liked {
   background: linear-gradient(135deg, #ffeaea, #ffcccc);
   border-color: #ff6b6b;
   color: #e84118;
+  box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
 }
 
 .action-btn.favorited {
   background: linear-gradient(135deg, #fff7e0, #ffeaa7);
   border-color: #f1c40f;
   color: #e67e22;
+  box-shadow: 0 4px 15px rgba(241, 196, 15, 0.3);
 }
 
 .action-btn.animating {
-  animation: pop 0.6s ease;
+  animation: pop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes pop {
+  0% { transform: scale(1); }
+  25% { transform: scale(1.3); }
+  50% { transform: scale(0.9); }
+  75% { transform: scale(1.1); }
+  100% { transform: scale(1); }
 }
 
 .action-btn:disabled {
@@ -1391,8 +1486,16 @@ export default {
   animation: heartBeat 0.6s ease;
 }
 
+@keyframes heartBeat {
+  0% { transform: scale(1); }
+  25% { transform: scale(1.3); }
+  50% { transform: scale(0.9); }
+  75% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
 .btn-count {
-  font-weight: 600;
+  font-weight: 700;
   transition: all 0.3s ease;
 }
 
@@ -1400,8 +1503,8 @@ export default {
 .author-info {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-top: 15px;
+  gap: 15px;
+  margin-top: 20px;
 }
 
 .author-avatar-container {
@@ -1409,8 +1512,8 @@ export default {
 }
 
 .author-avatar {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   object-fit: cover;
   border: 2px solid #3498db;
@@ -1427,10 +1530,10 @@ export default {
 
 .author-name {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
   color: #2c3e50;
   display: block;
-  margin-bottom: 2px;
+  margin-bottom: 3px;
 }
 
 .author-stats {
@@ -1442,22 +1545,40 @@ export default {
 }
 
 .follow-btn {
-  padding: 6px 16px;
-  border: 1px solid #3498db;
-  border-radius: 18px;
+  padding: 8px 18px;
+  border: 2px solid #3498db;
+  border-radius: 20px;
   background: white;
   color: #3498db;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   white-space: nowrap;
+  position: relative;
+  overflow: hidden;
+}
+
+.follow-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(52, 152, 219, 0.1), transparent);
+  transition: left 0.5s;
+}
+
+.follow-btn:hover::before {
+  left: 100%;
 }
 
 .follow-btn:hover {
   background: #3498db;
   color: white;
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(52, 152, 219, 0.4);
 }
 
 .follow-btn.following {
@@ -1470,6 +1591,7 @@ export default {
   background: #e74c3c;
   border-color: #e74c3c;
   color: white;
+  box-shadow: 0 6px 20px rgba(231, 76, 60, 0.4);
 }
 
 .follow-btn.loading {
@@ -1482,6 +1604,58 @@ export default {
   cursor: not-allowed;
 }
 
+/* 卡片装饰元素 */
+.card-decoration {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.decoration-corner {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border: 2px solid transparent;
+  transition: all 0.4s ease;
+}
+
+.decoration-corner.top-left {
+  top: 15px;
+  left: 15px;
+  border-top: 2px solid #3498db;
+  border-left: 2px solid #3498db;
+}
+
+.decoration-corner.top-right {
+  top: 15px;
+  right: 15px;
+  border-top: 2px solid #9b59b6;
+  border-right: 2px solid #9b59b6;
+}
+
+.decoration-corner.bottom-left {
+  bottom: 15px;
+  left: 15px;
+  border-bottom: 2px solid #e74c3c;
+  border-left: 2px solid #e74c3c;
+}
+
+.decoration-corner.bottom-right {
+  bottom: 15px;
+  right: 15px;
+  border-bottom: 2px solid #2ecc71;
+  border-right: 2px solid #2ecc71;
+}
+
+.guide-card:hover .decoration-corner {
+  width: 25px;
+  height: 25px;
+}
+
 /* 分页优化 */
 .pagination {
   display: flex;
@@ -1492,20 +1666,37 @@ export default {
 }
 
 .btn-pagination {
-  padding: 12px 24px;
+  padding: 14px 28px;
   border: 2px solid #3498db;
   background: white;
   color: #3498db;
-  border-radius: 10px;
-  font-weight: 600;
-  transition: all 0.3s ease;
+  border-radius: 12px;
+  font-weight: 700;
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-pagination::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(52, 152, 219, 0.1), transparent);
+  transition: left 0.5s;
+}
+
+.btn-pagination:hover::before {
+  left: 100%;
 }
 
 .btn-pagination:hover:not(.disabled) {
   background: #3498db;
   color: white;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+  transform: translateY(-3px);
+  box-shadow: 0 8px 25px rgba(52, 152, 219, 0.4);
 }
 
 .btn-pagination.disabled {
@@ -1518,12 +1709,15 @@ export default {
   color: #666;
   font-weight: 600;
   font-size: 16px;
+  background: #f8f9fa;
+  padding: 10px 20px;
+  border-radius: 10px;
 }
 
 /* 空状态优化 */
 .no-data {
   text-align: center;
-  padding: 80px 20px;
+  padding: 100px 20px;
 }
 
 .empty-state {
@@ -1532,76 +1726,66 @@ export default {
 
 .empty-icon {
   font-size: 80px;
-  margin-bottom: 20px;
+  margin-bottom: 25px;
   opacity: 0.7;
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
 }
 
 .empty-state h3 {
   margin-bottom: 15px;
   color: #7f8c8d;
   font-size: 24px;
+  font-weight: 700;
 }
 
 .empty-state p {
   font-size: 16px;
   margin: 0;
+  opacity: 0.8;
 }
 
 /* 加载状态优化 */
 .loading {
   text-align: center;
-  padding: 80px 20px;
+  padding: 100px 20px;
   color: #666;
 }
 
 .spinner {
-  width: 50px;
-  height: 50px;
+  width: 60px;
+  height: 60px;
   border: 4px solid #f3f3f3;
   border-top: 4px solid #3498db;
   border-radius: 50%;
   animation: spin 1s linear infinite;
-  margin: 0 auto 20px;
+  margin: 0 auto 25px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.1);
 }
 
 /* 错误状态优化 */
 .error {
   background: linear-gradient(135deg, #ffe6e6, #ffcccc);
   color: #c0392b;
-  padding: 20px;
-  border-radius: 12px;
+  padding: 25px;
+  border-radius: 16px;
   border: 1px solid #e74c3c;
-  margin: 20px 0;
+  margin: 30px 0;
   text-align: center;
-  font-weight: 500;
-}
-
-/* 动画定义 */
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-@keyframes pop {
-  0% { transform: scale(1); }
-  40% { transform: scale(1.2); }
-  70% { transform: scale(0.95); }
-  100% { transform: scale(1); }
-}
-
-@keyframes heartBeat {
-  0% { transform: scale(1); }
-  25% { transform: scale(1.3); }
-  50% { transform: scale(0.9); }
-  75% { transform: scale(1.2); }
-  100% { transform: scale(1); }
+  font-weight: 600;
+  box-shadow: 0 6px 20px rgba(231, 76, 60, 0.15);
+  border-left: 4px solid #e74c3c;
 }
 
 /* 响应式设计优化 */
 @media (max-width: 1200px) {
   .guides-grid {
     grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-    gap: 25px;
+    gap: 30px;
   }
 }
 
@@ -1658,21 +1842,29 @@ export default {
   
   .guides-grid {
     grid-template-columns: 1fr;
-    gap: 20px;
+    gap: 25px;
   }
   
   .section-title {
-    font-size: 2em;
+    font-size: 2.2em;
   }
   
   .guide-stats {
-    gap: 10px;
+    gap: 12px;
     flex-wrap: wrap;
   }
   
   .pagination {
     flex-direction: column;
     gap: 15px;
+  }
+  
+  .card-img.image-portrait {
+    max-width: 70%;
+  }
+  
+  .card-img.image-small {
+    max-width: 50%;
   }
 }
 
@@ -1694,7 +1886,7 @@ export default {
   }
   
   .card-image-container {
-    height: 200px;
+    height: 220px;
   }
   
   .card-body {
@@ -1704,12 +1896,20 @@ export default {
   .author-info {
     flex-direction: column;
     align-items: flex-start;
-    gap: 10px;
+    gap: 12px;
   }
   
   .follow-btn {
     align-self: stretch;
     text-align: center;
+  }
+  
+  .card-img.image-portrait {
+    max-width: 60%;
+  }
+  
+  .card-img.image-small {
+    max-width: 45%;
   }
 }
 
@@ -1717,17 +1917,17 @@ export default {
 .container {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 0 20px;
+  padding: 0 25px;
 }
 
 .btn {
   padding: 12px 24px;
   border: none;
-  border-radius: 8px;
+  border-radius: 12px;
   cursor: pointer;
   font-size: 14px;
   font-weight: 600;
-  transition: all 0.3s ease;
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   text-decoration: none;
   display: inline-flex;
   align-items: center;
@@ -1738,12 +1938,13 @@ export default {
 .btn-primary {
   background: linear-gradient(135deg, #3498db, #2980b9);
   color: white;
+  box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3);
 }
 
 .btn-primary:hover:not(:disabled) {
   background: linear-gradient(135deg, #2980b9, #1f639c);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+  box-shadow: 0 8px 25px rgba(52, 152, 219, 0.4);
 }
 
 .btn-primary:disabled {
@@ -1753,12 +1954,15 @@ export default {
 }
 
 .btn-secondary {
-  background: #95a5a6;
+  background: linear-gradient(135deg, #95a5a6, #7f8c8d);
   color: white;
+  box-shadow: 0 4px 15px rgba(149, 165, 166, 0.3);
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background: #7f8c8d;
+  background: linear-gradient(135deg, #7f8c8d, #636e72);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(149, 165, 166, 0.4);
 }
 
 .form-control {
