@@ -21,22 +21,27 @@
         <!-- 攻略标题 -->
         <h1 class="guide-title">{{ guide.title }}</h1>
         
-        <!-- 攻略文件 -->
-        <div class="guide-file-container">
-          <img
-            v-if="!isWordDocument"
-            :src="guide.image_url"
-            :alt="guide.title"
-            class="guide-image"
-            @error="handleImageError"
-          >
-          <div v-else class="word-document-download">
-            <a :href="guide.image_url" target="_blank" rel="noopener noreferrer" class="btn btn-primary">
-              下载攻略文档
-            </a>
-          </div>
+        <!-- 封面图片 -->
+        <img
+          v-if="guide.cover_image_url"
+          :src="guide.cover_image_url"
+          :alt="guide.title"
+          class="guide-image"
+          @error="handleImageError"
+        >
+
+        <!-- 文档下载 -->
+        <div v-if="guide.document_url" class="document-download">
+          <a :href="guide.document_url" download class="btn btn-primary">
+            下载攻略文档
+          </a>
         </div>
         
+        <!-- 攻略内容 -->
+        <div class="guide-body">
+          <p class="guide-text">{{ guide.content }}</p>
+        </div>
+
         <!-- 攻略元信息 -->
         <div class="guide-meta">
           <span class="region-tag" :class="guide.region === '日本' ? 'japan' : 'china'">
@@ -46,11 +51,6 @@
           <span class="views">👁️ {{ guide.views }} 浏览</span>
           <span class="likes">❤️ {{ guide.likes }} 点赞</span>
           <span class="favorites">⭐ {{ guide.favorites }} 收藏</span>
-        </div>
-        
-        <!-- 攻略内容 -->
-        <div class="guide-body">
-          <p class="guide-text">{{ guide.content }}</p>
         </div>
         
         <!-- 作者信息 -->
@@ -300,15 +300,6 @@ export default {
       showUnfollowModal: false
     }
   },
-  computed: {
-    isWordDocument() {
-      if (this.guide && this.guide.image_url) {
-        const url = this.guide.image_url.toLowerCase();
-        return url.endsWith('.doc') || url.endsWith('.docx');
-      }
-      return false;
-    }
-  },
   mounted() {
     this.fetchGuideDetail()
   },
@@ -447,54 +438,21 @@ export default {
       try {
         console.log('💬 开始加载评论，数量:', comments.length);
         
-        // 为每个评论获取点赞状态和回复数量
-        this.comments = await Promise.all(
-          comments.map(async (comment) => {
-            try {
-              let likeStatus = { liked: false };
-              let replyCount = { count: 0 };
-              
-              // 获取点赞状态
-              try {
-                likeStatus = await this.getCommentLikeStatus(comment.id);
-              } catch (error) {
-                console.warn(`获取评论 ${comment.id} 点赞状态失败:`, error);
-              }
-              
-              // 获取回复数量
-              try {
-                replyCount = await this.getReplyCount(comment.id);
-              } catch (error) {
-                console.warn(`获取评论 ${comment.id} 回复数量失败:`, error);
-              }
-              
-              return {
-                ...comment,
-                liked: likeStatus.liked,
-                likeLoading: false,
-                animating: false,
-                deleting: false,
-                loadingReplies: false,
-                replyCount: replyCount.count || 0,
-                replies: null
-              };
-            } catch (error) {
-              console.error(`处理评论 ${comment.id} 失败:`, error);
-              return {
-                ...comment,
-                liked: false,
-                likeLoading: false,
-                animating: false,
-                deleting: false,
-                loadingReplies: false,
-                replyCount: 0,
-                replies: null
-              };
-            }
-          })
-        );
+        // 为后端优化做准备：移除循环API请求，使用默认值
+        this.comments = comments.map(comment => ({
+          ...comment,
+          liked: false, // 占位符
+          likeLoading: false,
+          animating: false,
+          deleting: false,
+          loadingReplies: false,
+          // 后端将来会直接提供 replyCount，现在暂时使用默认值或后端已有的值
+          replyCount: comment.replyCount || 0,
+          replies: null // 初始时回复不加载
+        }));
         
-        this.totalCommentCount = this.comments.length;
+        const totalReplies = this.comments.reduce((sum, comment) => sum + comment.replyCount, 0);
+        this.totalCommentCount = this.comments.length + totalReplies;
         console.log('✅ 评论加载完成');
       } catch (error) {
         console.error('❌ 加载评论失败:', error);
@@ -510,33 +468,17 @@ export default {
       try {
         const response = await this.$api.get(`/comments/${comment.id}/replies`);
         
-        // 为每个回复获取点赞状态
-        const repliesWithLikeStatus = await Promise.all(
-          response.replies.map(async (reply) => {
-            try {
-              const likeStatus = await this.getCommentLikeStatus(reply.id);
-              return {
-                ...reply,
-                liked: likeStatus.liked,
-                likeLoading: false,
-                animating: false,
-                deleting: false
-              };
-            } catch (error) {
-              console.error(`处理回复 ${reply.id} 失败:`, error);
-              return {
-                ...reply,
-                liked: false,
-                likeLoading: false,
-                animating: false,
-                deleting: false
-              };
-            }
-          })
-        );
+        // 为后端优化做准备：移除循环API请求，使用默认值
+        const repliesWithState = response.replies.map(reply => ({
+          ...reply,
+          liked: false, // 占位符
+          likeLoading: false,
+          animating: false,
+          deleting: false
+        }));
         
         // 更新评论的回复列表
-        comment.replies = repliesWithLikeStatus;
+        comment.replies = repliesWithState;
         
       } catch (error) {
         console.error('加载回复失败:', error);
@@ -625,42 +567,69 @@ export default {
 
     // 添加评论
     async addComment() {
-      if (!this.newComment.trim()) return
+      if (!this.newComment.trim()) return;
       
-      this.commentSubmitting = true
+      this.commentSubmitting = true;
       
       try {
         const commentData = {
-          content: this.newComment.trim()
-        }
+          content: this.newComment.trim(),
+        };
         
         // 如果是回复，添加父评论ID
         if (this.replyingTo) {
-          commentData.parent_id = this.replyingTo.id
+          commentData.parent_id = this.replyingTo.id;
         }
         
-        const response = await this.$api.post(`/guides/${this.guide.id}/comments`, commentData)
+        const response = await this.$api.post(`/guides/${this.guide.id}/comments`, commentData);
         
-        if (this.replyingTo) {
-          // 如果是回复，重新加载回复列表
-          await this.loadReplies(this.replyingTo.parent_id ? this.comments.find(c => c.id === this.replyingTo.parent_id) : this.replyingTo)
+        // API成功后，直接更新本地数据
+        const newCommentData = {
+          ...response.comment,
+          liked: false,
+          likes: 0,
+          likeLoading: false,
+          animating: false,
+          deleting: false,
+          // 如果是新评论，初始化回复相关字段
+          ...( !response.comment.parent_id && {
+            replies: [],
+            replyCount: 0,
+            loadingReplies: false
+          })
+        };
+
+        if (response.comment.parent_id) {
+          // 这是一个回复
+          // 找到要添加回复的顶级评论
+          const topLevelParentId = this.replyingTo.parent_id || this.replyingTo.id;
+          const topLevelComment = this.comments.find(c => c.id === topLevelParentId);
+
+          if (topLevelComment) {
+            if (!topLevelComment.replies) {
+              topLevelComment.replies = [];
+            }
+            topLevelComment.replies.push(newCommentData);
+            topLevelComment.replyCount = (topLevelComment.replyCount || 0) + 1;
+          } else {
+             // 如果找不到父评论，作为后备方案，重新加载所有内容
+            console.warn('找不到父评论，将重新加载所有攻略详情。');
+            await this.fetchGuideDetail();
+          }
         } else {
-          // 如果是新评论，重新加载所有评论
-          await this.fetchGuideDetail()
+          // 这是一个新的顶级评论
+          this.comments.unshift(newCommentData);
         }
         
-        this.newComment = ''
-        this.replyingTo = null
-        
-        this.$nextTick(() => {
-          this.totalCommentCount++
-        })
+        this.newComment = '';
+        this.replyingTo = null;
+        this.totalCommentCount++;
         
       } catch (error) {
-        console.error('发表评论失败:', error)
-        this.error = '发表评论失败，请重试'
+        console.error('发表评论失败:', error);
+        this.error = '发表评论失败，请重试';
       } finally {
-        this.commentSubmitting = false
+        this.commentSubmitting = false;
       }
     },
 
@@ -939,6 +908,11 @@ export default {
   margin-bottom: 25px;
   padding-bottom: 15px;
   border-bottom: 1px solid #ececec;
+/* 文档下载 */
+.document-download {
+  margin: 20px 0;
+  text-align: center;
+}
   justify-content: center;
 }
 

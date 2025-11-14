@@ -431,97 +431,119 @@ export default {
     }
   },
   provide() {
-    return {
-      $api: {
-        get: async (url) => {
-          try {
-            const response = await fetch(`http://localhost:3000/api${url}`, {
-              headers: {
-                'Authorization': `Bearer ${localStorage.getItem('token')}`
-              }
-            })
-            
-            if (!response.ok) {
-              const errorData = await response.json()
-              throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
-            }
-            
-            return await response.json()
-          } catch (error) {
-            console.error('GET请求失败:', error)
-            throw error
-          }
-        },
-        
-        post: async (url, data) => {
-          try {
-            const response = await fetch(`http://localhost:3000/api${url}`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('token')}`
+          return {
+            $api: {
+              get: async (url) => {
+                try {
+                  const response = await fetch(`http://localhost:3000/api${url}`, {
+                    headers: {
+                      'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    }
+                  })
+                  
+                  if (!response.ok) {
+                    const errorData = await response.json()
+                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
+                  }
+                  
+                  return await response.json()
+                } catch (error) {
+                  console.error('GET请求失败:', error)
+                  throw error
+                }
               },
-              body: JSON.stringify(data)
-            })
-            
-            if (!response.ok) {
-              const errorData = await response.json()
-              throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
-            }
-            
-            return await response.json()
-          } catch (error) {
-            console.error('POST请求失败:', error)
-            throw error
-          }
-        },
-        
-        put: async (url, data) => {
-          try {
-            const response = await fetch(`http://localhost:3000/api${url}`, {
-              method: 'PUT',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('token')}`
+              
+              post: async (url, data, config = {}) => {
+                try {
+                  const headers = {
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                  }
+                  
+                  // 如果是 FormData，不设置 Content-Type，让浏览器自动设置
+                  if (data instanceof FormData) {
+                    console.log('📤 ��送 FormData 请求')
+                    const response = await fetch(`http://localhost:3000/api${url}`, {
+                      method: 'POST',
+                      headers: headers,
+                      body: data,
+                      ...config
+                    })
+                    
+                    if (!response.ok) {
+                      const errorData = await response.json()
+                      throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
+                    }
+                    
+                    return await response.json()
+                  } else {
+                    // 如果是普通对象，设置为 JSON
+                    headers['Content-Type'] = 'application/json'
+                    const response = await fetch(`http://localhost:3000/api${url}`, {
+                      method: 'POST',
+                      headers: headers,
+                      body: JSON.stringify(data),
+                      ...config
+                    })
+                    
+                    if (!response.ok) {
+                      const errorData = await response.json()
+                      throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
+                    }
+                    
+                    return await response.json()
+                  }
+                } catch (error) {
+                  console.error('POST请求失败:', error)
+                  throw error
+                }
               },
-              body: JSON.stringify(data)
-            })
-            
-            if (!response.ok) {
-              const errorData = await response.json()
-              throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
-            }
-            
-            return await response.json()
-          } catch (error) {
-            console.error('PUT请求失败:', error)
-            throw error
-          }
-        },
-        
-        delete: async (url) => {
-          try {
-            const response = await fetch(`http://localhost:3000/api${url}`, {
-              method: 'DELETE',
-              headers: {
-                'Authorization': `Bearer ${localStorage.getItem('token')}`
+              
+              put: async (url, data) => {
+                try {
+                  const response = await fetch(`http://localhost:3000/api${url}`, {
+                    method: 'PUT',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
+                    body: JSON.stringify(data)
+                  })
+                  
+                  if (!response.ok) {
+                    const errorData = await response.json()
+                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
+                  }
+                  
+                  return await response.json()
+                } catch (error) {
+                  console.error('PUT请求失败:', error)
+                  throw error
+                }
+              },
+              
+              delete: async (url) => {
+                try {
+                  const response = await fetch(`http://localhost:3000/api${url}`, {
+                    method: 'DELETE',
+                    headers: {
+                      'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    }
+                  })
+                  
+                  if (!response.ok) {
+                    const errorData = await response.json()
+                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
+                  }
+                  
+                  return await response.json()
+                } catch (error) {
+                  console.error('DELETE请求失败:', error)
+                  throw error
+                }
               }
-            })
-            
-            if (!response.ok) {
-              const errorData = await response.json()
-              throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
             }
-            
-            return await response.json()
-          } catch (error) {
-            console.error('DELETE请求失败:', error)
-            throw error
           }
         }
-      }
-    }
-  }
 }
 </script>
 

@@ -37,24 +37,29 @@ const storage = multer.diskStorage({
   filename: function (req, file, cb) {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     const ext = path.extname(file.originalname);
-    cb(null, 'image-' + uniqueSuffix + ext);
+    cb(null, file.fieldname + '-' + uniqueSuffix + ext);
   }
 });
 
 const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 5 * 1024 * 1024 // 5MB
+    fileSize: 30 * 1024 * 1024, // 从 5MB 改为 30MB
+    files: 10 // 可选：同时上传的文件数量限制
   },
   fileFilter: function (req, file, cb) {
     const allowedMimeTypes = [
       'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/pdf', // 可选：添加PDF支持
+      'application/vnd.ms-powerpoint',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation'
     ];
+    
     if (file.mimetype.startsWith('image/') || allowedMimeTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error('不支持的文件类型。只支持图片和Word文档。'), false);
+      cb(new Error('不支持的文件类型。支持图片、Word文档、PDF和PPT文件。'), false);
     }
   }
 });
@@ -67,6 +72,21 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
+// 为需要 JSON 的路由单独添加 JSON 解析
+const jsonRoutes = [
+  '/api/register',
+  '/api/login',
+  '/api/user/avatar',
+  '/api/guides/:id/like',
+  '/api/guides/:id/favorite',
+  '/api/users/:id/follow',
+  '/api/comments/:id/like',
+  '/api/guides/:id/comments'
+];
+
+app.use(jsonRoutes, express.json());
+app.use(express.urlencoded({ extended: true })); // 解析 URL 编码数据
+
 // 静态文件服务 - 提供上传的图片访问
 app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
 app.use('/images', express.static(path.join(__dirname, 'public/images')));
@@ -76,7 +96,7 @@ app.use((req, res, next) => {
   console.log(`📨 ${new Date().toISOString()} ${req.method} ${req.url}`);
   if (req.method === 'POST' || req.method === 'PUT') {
     if (req.url === '/api/upload') {
-      console.log('📦 文件上传请求');
+      console.log('📦 文件上传���求');
     } else {
       console.log('📦 请求体:', req.body);
     }
@@ -84,7 +104,80 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.json());
+// 发布攻略 (包含文件上传)
+// 发布攻略 (包含文件上传)
+app.post('/api/guides', authenticateToken, upload.fields([
+  { name: 'cover_image', maxCount: 1 }, 
+  { name: 'document', maxCount: 1 }
+]), async (req, res) => {
+  try {
+    console.log('🔵 收到发布攻略请求');
+    console.log('📦 请求头:', req.headers);
+    console.log('📝 请求体字段:', req.body);
+    console.log('📁 请求文件:', req.files);
+    
+    const { title, content, region, location } = req.body;
+    
+    // 验证必填字段
+    if (!title || title.trim() === '') {
+      console.log('❌ 标题为空');
+      return res.status(400).json({ error: '请填写攻略标题' });
+    }
+    if (!content || content.trim() === '') {
+      console.log('❌ 内容为空');
+      return res.status(400).json({ error: '请填写攻略内容' });
+    }
+    if (!region || region.trim() === '') {
+      console.log('❌ 地区为空');
+      return res.status(400).json({ error: '请选择地区' });
+    }
+    if (!location || location.trim() === '') {
+      console.log('❌ 地点为空');
+      return res.status(400).json({ error: '请填写具体地点' });
+    }
+
+    const userId = req.user.userId;
+    console.log('✅ 所有字段验证通过，用户ID:', userId);
+
+    let coverImageUrl = null;
+    if (req.files && req.files['cover_image'] && req.files['cover_image'][0]) {
+      coverImageUrl = `/uploads/${req.files['cover_image'][0].filename}`;
+      console.log('📸 封面图片:', coverImageUrl);
+    }
+
+    let documentUrl = null;
+    if (req.files && req.files['document'] && req.files['document'][0]) {
+      documentUrl = `/uploads/${req.files['document'][0].filename}`;
+      console.log('📄 文档:', documentUrl);
+    }
+
+    console.log('🔄 准备插入数据库...');
+    const [result] = await pool.query(
+      'INSERT INTO guides (title, content, region, location, cover_image_url, document_url, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [title, content, region, location, coverImageUrl, documentUrl, userId]
+    );
+
+    console.log('✅ 攻略插入数据库成功，ID:', result.insertId);
+
+    res.status(201).json({
+      message: '攻略发布成功',
+      guide: {
+        id: result.insertId,
+        title,
+        content,
+        region,
+        location,
+        cover_image_url: coverImageUrl,
+        document_url: documentUrl,
+        user_id: userId
+      }
+    });
+  } catch (error) {
+    console.error('❌ 发布攻略失败:', error);
+    console.error('❌ 错误堆栈:', error.stack);
+    res.status(500).json({ error: '发布攻略失败', details: error.message });
+  }
+});
 
 // 检查并添加缺失的表字段
 async function checkAndAddColumns() {
@@ -159,7 +252,8 @@ async function initDatabase() {
         content TEXT NOT NULL,
         region ENUM('日本', '中国') NOT NULL,
         location VARCHAR(100) NOT NULL,
-        image_url VARCHAR(255) DEFAULT '/images/f.jpg',
+        cover_image_url VARCHAR(255) DEFAULT '/uploads/default-cover.jpg',
+        document_url VARCHAR(255),
         user_id INT NOT NULL,
         views INT DEFAULT 0,
         likes INT DEFAULT 0,
@@ -251,10 +345,10 @@ async function initDatabase() {
     const [guides] = await pool.query('SELECT COUNT(*) as count FROM guides');
     if (guides[0].count === 0) {
       await pool.query(`
-        INSERT INTO guides (title, content, region, location, image_url, user_id, views, likes, favorites) VALUES 
+        INSERT INTO guides (title, content, region, location, cover_image_url, user_id, views, likes, favorites) VALUES
         ('日本东京旅行攻略', '东京是一个充满活力的现代化都市，融合了传统与现代文化。推荐景点：\n\n1. 浅草寺 - 东京最古老的寺庙\n2. 东京塔 - 城市地标建筑\n3. 秋叶原 - 动漫和电子产品天堂\n4. 涩谷十字路口 - 感受东京的繁忙\n5. 皇居外苑 - 体验日本皇室文化\n\n美食推荐：寿司、拉面、天妇罗、章鱼烧', '日本', '东京', '/images/banner1.jpg', 1, 150, 25, 12),
         ('中国北京长城之旅', '北京长城是世界文化遗产，中国的象征之一。旅行建议：\n\n1. 八达岭长城 - 最著名的段落，设施完善\n2. 慕田峪长城 - 风景优美，游客相对较少\n3. 建议早上7点前到达避免人流高峰\n4. 穿着舒适的鞋子，准备充足的水\n5. 春秋季是最佳游览时间\n\n周边景点：明十三陵、古北水镇', '中国', '北京', '/images/banner2.jpg', 1, 200, 30, 18),
-        ('日本京都文化体验', '京都是日本的古都，保留了大量历史建筑和文化传统。\n\n必游景点：\n1. 伏见稻荷大社 - 千本鸟居\n2. 金阁寺 - 金光闪闪的寺庙\n3. 清水寺 - 京都最古老的寺庙\n4. 岚山竹林 - 宁静的竹林小径\n5. 祇园 - 体验传统艺伎文化\n\n特色体验：和服体验、茶道、怀石料理', '日本', '京都', '/images/banner3.jpg', 1, 120, 18, 8),
+        ('日本京都文化体验', '京都是日本的古都，保留了大量历史建筑和文化传统。\n\n必游���点：\n1. 伏见稻荷大社 - 千本鸟居\n2. 金阁寺 - 金光闪闪的寺庙\n3. 清水寺 - 京都最古老的寺庙\n4. 岚山竹林 - 宁静的竹林小径\n5. 祇园 - 体验传统艺伎文化\n\n特色体验：和服体验、茶道、怀石料理', '日本', '京都', '/images/banner3.jpg', 1, 120, 18, 8),
         ('中国桂林山水风光', '桂林山水甲天下，以喀斯特地貌闻名于世。\n\n推荐行程：\n1. 漓江游船 - 欣赏山水画卷\n2. 阳朔西街 - 感受异国情调\n3. 象鼻山 - 桂林城徽\n4. 龙脊梯田 - 壮观的梯田景观\n5. 银子岩 - 神奇的溶洞景观\n\n美食：桂林米粉、啤酒鱼、荔浦芋头', '中国', '桂林', '/images/banner4.jpg', 1, 180, 22, 15)
       `);
       console.log('测试攻略数据创建成功');
@@ -310,6 +404,26 @@ function authenticateToken(req, res, next) {
       return res.status(403).json({ error: '令牌无效' });
     }
     req.user = user;
+    next();
+  });
+}
+
+// JWT验证中间件 (可选, 用于非强制登录但需要用户信息的场景)
+function optionalAuthenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    // 没有 token，直接进入下一个中间件
+    return next();
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (!err) {
+      // token 有效，将用户信息附加到请求对象
+      req.user = user;
+    }
+    // 无论 token 是否有效，都继续执行
     next();
   });
 }
@@ -1052,51 +1166,62 @@ app.get('/api/guides', async (req, res) => {
     const limitNum = parseInt(limit) || 10;
     const offsetNum = (pageNum - 1) * limitNum;
     
-    // 构建 WHERE 条件
+    // 构建 WHERE 条件和参数
     let whereConditions = [];
+    let params = [];
     
     if (region) {
-      whereConditions.push(`g.region = '${region}'`);
+      whereConditions.push(`g.region = ?`);
+      params.push(region);
     }
 
     if (search) {
       const searchParam = `%${search}%`;
-      whereConditions.push(`(g.title LIKE '${searchParam}' OR g.content LIKE '${searchParam}' OR g.location LIKE '${searchParam}')`);
+      whereConditions.push(`(g.title LIKE ? OR g.content LIKE ? OR g.location LIKE ?)`);
+      params.push(searchParam, searchParam, searchParam);
     }
 
     // 构建完整的 SQL 查询
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
     
     const sql = `
-      SELECT g.*, u.username, u.avatar 
-      FROM guides g 
-      LEFT JOIN users u ON g.user_id = u.id 
+      SELECT g.*, u.username, u.avatar
+      FROM guides g
+      LEFT JOIN users u ON g.user_id = u.id
       ${whereClause}
-      ORDER BY g.created_at DESC 
-      LIMIT ${limitNum} OFFSET ${offsetNum}
+      ORDER BY g.created_at DESC
+      LIMIT ? OFFSET ?
     `;
-
+    
+    const queryParams = [...params, limitNum, offsetNum];
     console.log('执行SQL:', sql);
+    console.log('SQL参数:', queryParams);
 
-    // 使用 query 方法执行
-    const [guides] = await pool.query(sql);
+    // 使用参数化查询
+    const [guides] = await pool.query(sql, queryParams);
 
     // 构建计数查询
     let countWhereConditions = [];
+    let countParams = [];
     
     if (region) {
-      countWhereConditions.push(`region = '${region}'`);
+      countWhereConditions.push(`region = ?`);
+      countParams.push(region);
     }
 
     if (search) {
       const searchParam = `%${search}%`;
-      countWhereConditions.push(`(title LIKE '${searchParam}' OR content LIKE '${searchParam}' OR location LIKE '${searchParam}')`);
+      countWhereConditions.push(`(title LIKE ? OR content LIKE ? OR location LIKE ?)`);
+      countParams.push(searchParam, searchParam, searchParam);
     }
 
     const countWhereClause = countWhereConditions.length > 0 ? `WHERE ${countWhereConditions.join(' AND ')}` : '';
     const countSql = `SELECT COUNT(*) as total FROM guides ${countWhereClause}`;
     
-    const [countResult] = await pool.query(countSql);
+    console.log('执行计数SQL:', countSql);
+    console.log('计数SQL参数:', countParams);
+
+    const [countResult] = await pool.query(countSql, countParams);
     const total = countResult[0].total;
 
     console.log('查询成功:', {
@@ -1112,18 +1237,19 @@ app.get('/api/guides', async (req, res) => {
     });
   } catch (error) {
     console.error('获取攻略列表失败:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: '获取攻略列表失败',
-      details: error.message 
+      details: error.message
     });
   }
 });
 
 // 获取攻略详情
-app.get('/api/guides/:id', async (req, res) => {
+app.get('/api/guides/:id', optionalAuthenticateToken, async (req, res) => {
   try {
     const guideId = req.params.id;
-    console.log('获取攻略详情:', guideId);
+    const userId = req.user ? req.user.userId : null;
+    console.log('获取攻略详情:', { guideId, userId });
 
     // 更新浏览量
     await pool.query(
@@ -1132,9 +1258,9 @@ app.get('/api/guides/:id', async (req, res) => {
     );
 
     const [guides] = await pool.query(
-      `SELECT g.*, u.username, u.avatar 
-       FROM guides g 
-       LEFT JOIN users u ON g.user_id = u.id 
+      `SELECT g.*, u.username, u.avatar
+       FROM guides g
+       LEFT JOIN users u ON g.user_id = u.id
        WHERE g.id = ?`,
       [guideId]
     );
@@ -1143,24 +1269,27 @@ app.get('/api/guides/:id', async (req, res) => {
       return res.status(404).json({ error: '攻略未找到' });
     }
 
-    // 只获取顶级评论（parent_id 为 NULL）
-    const [comments] = await pool.query(
-      `SELECT c.*, u.username, u.avatar 
-       FROM comments c 
-       LEFT JOIN users u ON c.user_id = u.id 
-       WHERE c.guide_id = ? AND c.parent_id IS NULL
-       ORDER BY c.created_at DESC`,
-      [guideId]
-    );
+    // 优化评论查询：一次性获取顶级评论、回复数和当前用户的点赞状态
+    const commentsQuery = `
+      SELECT
+        c.*,
+        u.username,
+        u.avatar,
+        (SELECT COUNT(*) FROM comments rc WHERE rc.parent_id = c.id) as replyCount,
+        ${userId ? `(EXISTS(SELECT 1 FROM comment_likes cl WHERE cl.comment_id = c.id AND cl.user_id = ?)) as liked` : 'FALSE as liked'}
+      FROM comments c
+      LEFT JOIN users u ON c.user_id = u.id
+      WHERE c.guide_id = ? AND c.parent_id IS NULL
+      ORDER BY c.created_at DESC
+    `;
+    
+    const queryParams = userId ? [userId, guideId] : [guideId];
+    const [comments] = await pool.query(commentsQuery, queryParams);
 
-    // 为每个顶级评论获取回复数量
-    for (let comment of comments) {
-      const [replyCount] = await pool.query(
-        'SELECT COUNT(*) as count FROM comments WHERE parent_id = ?',
-        [comment.id]
-      );
-      comment.replyCount = replyCount[0].count;
-    }
+    // 将 liked 字段从 0/1 转换为布尔值
+    comments.forEach(comment => {
+      comment.liked = !!comment.liked;
+    });
 
     res.json({
       guide: guides[0],
@@ -1172,38 +1301,6 @@ app.get('/api/guides/:id', async (req, res) => {
   }
 });
 
-// 发布攻略
-app.post('/api/guides', authenticateToken, async (req, res) => {
-  try {
-    const { title, content, region, location, image_url } = req.body;
-    const userId = req.user.userId;
-
-    if (!title || !content || !region || !location) {
-      return res.status(400).json({ error: '请填写所有必填字段' });
-    }
-
-    const [result] = await pool.query(
-      'INSERT INTO guides (title, content, region, location, image_url, user_id) VALUES (?, ?, ?, ?, ?, ?)',
-      [title, content, region, location, image_url || '/images/f.jpg', userId]
-    );
-
-    res.status(201).json({
-      message: '攻略发布成功',
-      guide: {
-        id: result.insertId,
-        title,
-        content,
-        region,
-        location,
-        image_url: image_url || '/images/f.jpg',
-        user_id: userId
-      }
-    });
-  } catch (error) {
-    console.error('发布攻略失败:', error);
-    res.status(500).json({ error: '发布攻略失败', details: error.message });
-  }
-});
 
 // 获取用户发布的攻略
 app.get('/api/user/guides', authenticateToken, async (req, res) => {
@@ -1320,6 +1417,10 @@ app.post('/api/guides/:id/comments', authenticateToken, async (req, res) => {
       );
       newComment.parent_username = parentComments[0]?.username;
     }
+
+    // 为新评论附加额外的前端所需字段
+    newComment.liked = false;
+    newComment.replyCount = 0;
 
     console.log('✅ 评论添加成功:', newComment.id);
 
@@ -1533,10 +1634,13 @@ app.get('/api/user/profile', authenticateToken, async (req, res) => {
 app.use((error, req, res, next) => {
   if (error instanceof multer.MulterError) {
     if (error.code === 'LIMIT_FILE_SIZE') {
-      return res.status(413).json({ error: '文件太大，请选择小于5MB的图片' });
+      return res.status(413).json({ error: '文件太大，请选择小于30MB的文件' });
     }
     if (error.code === 'LIMIT_UNEXPECTED_FILE') {
       return res.status(400).json({ error: '文件字段名不正确' });
+    }
+    if (error.code === 'LIMIT_FILE_COUNT') {
+      return res.status(400).json({ error: '上传文件数量超出限制' });
     }
   }
   next(error);

@@ -65,10 +65,11 @@
               <form @submit.prevent="publishGuide" class="guide-form">
                 <div class="form-row">
                   <div class="form-group">
-                    <label>攻略标题 *</label>
-                    <input 
-                      type="text" 
-                      class="form-control" 
+                    <label for="guideTitle">攻略标题 *</label>
+                    <input
+                      type="text"
+                      id="guideTitle"
+                      class="form-control"
                       v-model="newGuide.title"
                       placeholder="请输入攻略标题"
                       required
@@ -76,8 +77,8 @@
                   </div>
                   
                   <div class="form-group">
-                    <label>地区 *</label>
-                    <select v-model="newGuide.region" class="form-control" required>
+                    <label for="guideRegion">地区 *</label>
+                    <select id="guideRegion" v-model="newGuide.region" class="form-control" required>
                       <option value="">请选择地区</option>
                       <option value="日本">日本</option>
                       <option value="中国">中国</option>
@@ -87,10 +88,11 @@
                 
                 <div class="form-row">
                   <div class="form-group">
-                    <label>具体地点 *</label>
-                    <input 
-                      type="text" 
-                      class="form-control" 
+                    <label for="guideLocation">具体地点 *</label>
+                    <input
+                      type="text"
+                      id="guideLocation"
+                      class="form-control"
                       v-model="newGuide.location"
                       placeholder="例如：东京、北京、大阪..."
                       required
@@ -98,85 +100,49 @@
                   </div>
                 </div>
 
-                <!-- 图片上传区域 -->
                 <div class="form-group">
-                  <label>封面文件（图片或文档）</label>
-                  <div class="image-upload-section">
-                    <!-- 图片预览 -->
-                    <div v-if="imagePreview" class="image-preview">
-                      <img :src="imagePreview" alt="预览图片" class="preview-img">
-                      <button type="button" class="btn btn-danger btn-sm" @click="removeImage">
-                        移除图片
-                      </button>
-                    </div>
-                    
-                    <!-- 文件上传 -->
-                    <div class="file-upload-area">
-                      <input 
-                        type="file" 
-                        ref="fileInput"
-                        class="file-input" 
-                        accept="image/jpeg,image/png,image/gif,image/webp,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                        @change="handleFileSelect"
-                      >
-                      <div 
-                        class="upload-placeholder" 
-                        @click="triggerFileInput"
-                        @dragover="handleDragOver"
-                        @dragleave="handleDragLeave"
-                        @drop="handleDrop"
-                      >
-                        <div class="upload-icon">📁</div>
-                        <p class="upload-text">点击选择文件或拖拽到此处</p>
-                        <p class="upload-hint">支持 JPG, PNG, GIF, WebP, DOC, DOCX, 最大 5MB</p>
-                      </div>
-                    </div>
+                  <label for="guideCoverImage">封面图片</label>
+                  <input
+                    type="file"
+                    id="guideCoverImage"
+                    ref="coverImageInput"
+                    class="form-control"
+                    accept="image/*"
+                    @change="handleCoverImageSelect"
+                  >
+                  <!-- 封面图片预览 -->
+                  <div v-if="coverImagePreview" class="image-preview mt-2">
+                    <img :src="coverImagePreview" alt="封面预览" class="preview-img">
+                    <button type="button" class="btn btn-danger btn-sm mt-1" @click="removeCoverImage">
+                      移除图片
+                    </button>
+                  </div>
+                </div>
 
-                    <!-- 上传进度 -->
-                    <div v-if="uploading" class="upload-progress">
-                      <div class="progress-bar">
-                        <div 
-                          class="progress-fill" 
-                          :style="{ width: uploadProgress + '%' }"
-                        ></div>
-                      </div>
-                      <span class="progress-text">{{ uploadProgress }}%</span>
-                    </div>
-
-                    <!-- 图片URL输入（备用） -->
-                    <div class="image-url-input mt-2">
-                      <label>或者输入图片URL：(请输入http://localhost:3000/)为前缀</label>
-                      <input 
-                        type="url" 
-                        class="form-control" 
-                        v-model="newGuide.image_url"
-                        placeholder="https://example.com/image.jpg"
-                        @input="updateImagePreview"
-                      >
-                    </div>
-                    
-                    <!-- 图片示例 -->
-                    <div class="image-examples mt-2">
-                      <p class="example-title">快速选择示例图片：</p>
-                      <div class="example-images">
-                        <div 
-                          v-for="example in exampleImages" 
-                          :key="example.url"
-                          class="example-image"
-                          @click="selectExampleImage(example)"
-                        >
-                          <img :src="example.url" :alt="example.name" class="example-img">
-                          <span class="example-name">{{ example.name }}</span>
-                        </div>
-                      </div>
-                    </div>
+                <div class="form-group">
+                  <label for="guideDocument">攻略文档</label>
+                  <input
+                    type="file"
+                    id="guideDocument"
+                    ref="documentInput"
+                    class="form-control"
+                    @change="handleDocumentSelect"
+                  >
+                  <!-- 文档信息显示 -->
+                  <div v-if="documentFile" class="file-info mt-2">
+                    <p class="file-name">📄 {{ documentFile.name }}</p>
+                    <p class="file-size">大小: {{ formatFileSize(documentFile.size) }}</p>
+                    <button type="button" class="btn btn-danger btn-sm" @click="removeDocument">
+                      移除文档
+                    </button>
                   </div>
                 </div>
                 
                 <div class="form-group">
-                  <label>攻略内容 *</label>
-                  <textarea 
-                    class="form-control" 
+                  <label for="guideContent">攻略内容 *</label>
+                  <textarea
+                    id="guideContent"
+                    class="form-control"
                     v-model="newGuide.content"
                     placeholder="请详细描述你的旅行经历、tips、推荐景点等..."
                     rows="8"
@@ -199,6 +165,10 @@
                   >
                     重置
                   </button>
+                </div>
+
+                <div v-if="error" class="error mt-2">
+                  {{ error }}
                 </div>
               </form>
             </div>
@@ -242,7 +212,7 @@
                 >
                   <div class="like-content">
                     <img 
-                      :src="guide.image_url" 
+                      :src="guide.cover_image_url || '/images/f.jpg'" 
                       :alt="guide.title" 
                       class="like-img"
                       @error="handleImageError"
@@ -325,7 +295,7 @@
                 >
                   <div class="favorite-content">
                     <img 
-                      :src="guide.image_url" 
+                      :src="guide.cover_image_url || '/images/f.jpg'" 
                       :alt="guide.title" 
                       class="favorite-img"
                       @error="handleImageError"
@@ -407,7 +377,7 @@
                   class="guide-card"
                 >
                   <img 
-                    :src="guide.image_url" 
+                    :src="guide.cover_image_url || '/images/f.jpg'" 
                     :alt="guide.title" 
                     class="card-img"
                     @error="handleImageError"
@@ -481,33 +451,14 @@ export default {
       error: null,
       publishing: false,
       uploading: false,
-      uploadProgress: 0,
-      imagePreview: '',
-      selectedFile: null,
-      exampleImages: [
-        { 
-          name: '富士山', 
-          url: '/images/banner1.jpg' 
-        },
-        { 
-          name: '长城', 
-          url: '/images/banner2.jpg' 
-        },
-        { 
-          name: '京都', 
-          url: '/images/banner3.jpg' 
-        },
-        { 
-          name: '桂林', 
-          url: '/images/banner4.jpg' 
-        }
-      ],
+      coverImageFile: null,
+      coverImagePreview: null,
+      documentFile: null,
       newGuide: {
         title: '',
         content: '',
         region: '',
-        location: '',
-        image_url: ''
+        location: ''
       }
     }
   },
@@ -519,14 +470,11 @@ export default {
     }
   },
   methods: {
-    // 查看攻略详情（和Home.vue保持一致）
+    // 查看攻略详情
     async viewGuideDetail(guideId) {
       try {
         console.log('📖 查看攻略详情:', guideId);
-        
-        // 使用路由跳转到攻略详情页
         this.$router.push(`/guide/${guideId}`);
-        
       } catch (error) {
         console.error('❌ 跳转失败:', error);
         this.$emit('show-message', {
@@ -557,7 +505,6 @@ export default {
       this.likesError = null
       
       try {
-        // 使用点赞接口获取用户点赞的攻略
         const response = await this.$api.get('/user/likes')
         
         if (response && response.guides) {
@@ -584,7 +531,6 @@ export default {
       this.favoritesError = null
       
       try {
-        // 使用收藏接口获取用户收藏的攻略
         const response = await this.$api.get('/user/favorites')
         
         if (response && response.guides) {
@@ -613,15 +559,19 @@ export default {
       guide.removing = true
       
       try {
-        // 取消点赞
         await this.$api.post(`/guides/${guideId}/like`)
-        
-        // 从点赞列表中移除
         this.likedGuides = this.likedGuides.filter(g => g.id !== guideId)
-        
+        this.$emit('show-message', {
+          type: 'success',
+          text: '取消点赞成功'
+        });
       } catch (error) {
         console.error('取消点赞失败:', error)
         this.likesError = '取消点赞失败，请重试'
+        this.$emit('show-message', {
+          type: 'error',
+          text: '取消点赞失败，请重试'
+        });
       } finally {
         guide.removing = false
       }
@@ -635,56 +585,104 @@ export default {
       guide.removing = true
       
       try {
-        // 取消收藏
         await this.$api.post(`/guides/${guideId}/favorite`)
-        
-        // 从收藏列表中移除
         this.favoriteGuides = this.favoriteGuides.filter(g => g.id !== guideId)
-        
+        this.$emit('show-message', {
+          type: 'success',
+          text: '取消收藏成功'
+        });
       } catch (error) {
         console.error('移除收藏失败:', error)
         this.favoritesError = '移除收藏失败，请重试'
+        this.$emit('show-message', {
+          type: 'error',
+          text: '移除收藏失败，请重试'
+        });
       } finally {
         guide.removing = false
       }
     },
 
-    async publishGuide() {
-      if (!this.validateForm()) return
-      
-      this.publishing = true
-      this.error = null
-      
-      try {
-        // 如果没有设置图片，使用默认图片
-        const guideData = {
-          ...this.newGuide,
-          image_url: this.newGuide.image_url || '/images/f.jpg'
-        }
-        
-        await this.$api.post('/guides', guideData)
-        
-        this.$emit('show-message', {
-          type: 'success',
-          text: '攻略发布成功！'
-        });
-        
-        this.resetForm()
-        this.fetchMyGuides()
-        // 发布成功后切换到我的攻略页面
-        this.activeTab = 'myGuides'
-      } catch (error) {
-        this.error = error.details || error.error || '发布攻略失败'
-        console.error('Error publishing guide:', error)
-        this.$emit('show-message', {
-          type: 'error',
-          text: this.error
-        });
-      } finally {
-        this.publishing = false
-      }
-    },
+async publishGuide() {
+  if (!this.validateForm()) return;
+
+  this.publishing = true;
+  this.uploading = true;
+  this.error = null;
+
+  try {
+    console.log('📝 开始发布攻略，数据:', this.newGuide);
     
+    const formData = new FormData();
+    
+    // 添加文本字段
+    formData.append('title', this.newGuide.title || '');
+    formData.append('content', this.newGuide.content || '');
+    formData.append('region', this.newGuide.region || '');
+    formData.append('location', this.newGuide.location || '');
+
+    // 添加文件
+    if (this.coverImageFile) {
+      console.log('📸 添加封面图片:', this.coverImageFile.name);
+      formData.append('cover_image', this.coverImageFile);
+    }
+    if (this.documentFile) {
+      console.log('📄 添加文档:', this.documentFile.name);
+      formData.append('document', this.documentFile);
+    }
+
+    console.log('🚀 发送POST请求到 /api/guides');
+    
+    // 直接发送请求，不使用 $api 包装器，以便获取原始响应
+    const token = localStorage.getItem('token');
+    const response = await fetch('http://localhost:3000/api/guides', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      },
+      body: formData
+    });
+
+    console.log('📥 收到响应，状态:', response.status);
+    
+    if (!response.ok) {
+      let errorData;
+      try {
+        errorData = await response.json();
+      } catch (e) {
+        errorData = { error: `HTTP错误! 状态: ${response.status}` };
+      }
+      throw new Error(errorData.error || errorData.details || `HTTP错误! 状态: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('✅ 发布成功:', data);
+
+    this.$emit('show-message', {
+      type: 'success',
+      text: '攻略发布成功！'
+    });
+
+    this.resetForm();
+    this.fetchMyGuides();
+    this.activeTab = 'myGuides';
+    
+  } catch (error) {
+    console.error('❌ 发布失败:', error);
+    console.error('❌ 错误详情:', error.response || error);
+    
+    const errorMessage = error.message || '发布攻略失败';
+    this.error = errorMessage;
+    this.$emit('show-message', {
+      type: 'error',
+      text: errorMessage
+    });
+  } finally {
+    this.publishing = false;
+    this.uploading = false;
+  }
+},
+        
     async deleteGuide(guideId) {
       if (!confirm('确定要删除这篇攻略吗？此操作不可恢复。')) {
         return
@@ -705,7 +703,6 @@ export default {
             text: '攻略删除成功！'
           });
           await this.fetchMyGuides()
-          // 同时从点赞和收藏列表中移除
           this.likedGuides = this.likedGuides.filter(g => g.id !== guideId)
           this.favoriteGuides = this.favoriteGuides.filter(g => g.id !== guideId)
         } else {
@@ -724,17 +721,98 @@ export default {
     },
     
     editGuide(guide) {
-      // 简单的编辑功能 - 填充表单
-      this.newGuide = { 
+      this.newGuide = {
         title: guide.title,
         content: guide.content,
         region: guide.region,
-        location: guide.location,
-        image_url: guide.image_url
+        location: guide.location
+      };
+      this.activeTab = 'publish';
+    },
+    
+    // 处理封面图片选择
+    handleCoverImageSelect(event) {
+      const file = event.target.files[0];
+      if (file) {
+        // 验证文件类型
+        if (!file.type.startsWith('image/')) {
+          this.error = '请选择图片文件';
+          event.target.value = '';
+          return;
+        }
+        
+        // 验证文件大小 (5MB)
+        if (file.size > 5 * 1024 * 1024) {
+          this.error = '图片大小不能超过5MB';
+          event.target.value = '';
+          return;
+        }
+        
+        this.coverImageFile = file;
+        
+        // 创建预览
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          this.coverImagePreview = e.target.result;
+        };
+        reader.readAsDataURL(file);
       }
-      this.imagePreview = guide.image_url
-      // 切换到发布攻略页面
-      this.activeTab = 'publish'
+    },
+    
+// 处理文档选择
+handleDocumentSelect(event) {
+  const file = event.target.files[0];
+  if (file) {
+    // 验证文件类型 (允许更多文档类型)
+    const allowedTypes = [
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/pdf',
+      'application/vnd.ms-powerpoint',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+    ];
+    
+    if (!allowedTypes.includes(file.type)) {
+      this.error = '请选择支持的文档文件 (.doc, .docx, .pdf, .ppt, .pptx)';
+      event.target.value = '';
+      return;
+    }
+    
+    // 验证文件大小 (30MB)
+    if (file.size > 30 * 1024 * 1024) {
+      this.error = '文档大小不能超过30MB';
+      event.target.value = '';
+      return;
+    }
+    
+    this.documentFile = file;
+  }
+},
+    
+    // 移除封面图片
+    removeCoverImage() {
+      this.coverImageFile = null;
+      this.coverImagePreview = null;
+      if (this.$refs.coverImageInput) {
+        this.$refs.coverImageInput.value = '';
+      }
+    },
+    
+    // 移除文档
+    removeDocument() {
+      this.documentFile = null;
+      if (this.$refs.documentInput) {
+        this.$refs.documentInput.value = '';
+      }
+    },
+    
+    // 格式化文件大小
+    formatFileSize(bytes) {
+      if (bytes === 0) return '0 Bytes';
+      const k = 1024;
+      const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     },
     
     resetForm() {
@@ -743,18 +821,14 @@ export default {
         content: '',
         region: '',
         location: '',
-        image_url: ''
-      }
-      this.imagePreview = ''
-      this.selectedFile = null
-      this.uploadProgress = 0
-      if (this.$refs.fileInput) {
-        this.$refs.fileInput.value = ''
-      }
+      };
+      this.removeCoverImage();
+      this.removeDocument();
+      this.error = null;
     },
     
     validateForm() {
-      if (!this.newGuide.title.trim()) {
+      if (!this.newGuide.title || !this.newGuide.title.trim()) {
         this.error = '请输入攻略标题'
         return false
       }
@@ -764,12 +838,12 @@ export default {
         return false
       }
       
-      if (!this.newGuide.location.trim()) {
+      if (!this.newGuide.location || !this.newGuide.location.trim()) {
         this.error = '请输入具体地点'
         return false
       }
       
-      if (!this.newGuide.content.trim()) {
+      if (!this.newGuide.content || !this.newGuide.content.trim()) {
         this.error = '请输入攻略内容'
         return false
       }
@@ -786,137 +860,6 @@ export default {
       if (!dateString) return '未知时间'
       return new Date(dateString).toLocaleDateString('zh-CN')
     },
-
-    // 文件上传相关方法保持不变...
-    triggerFileInput() {
-      this.$refs.fileInput.click()
-    },
-    
-    handleFileSelect(event) {
-      const file = event.target.files[0]
-      if (!file) return
-
-      const isImage = file.type.startsWith('image/')
-      const isWord = file.type === 'application/msword' || file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || file.name.endsWith('.doc') || file.name.endsWith('.docx')
-
-      if (!isImage && !isWord) {
-        this.error = '请选择图片或Word文档'
-        return
-      }
-      
-      if (file.size > 5 * 1024 * 1024) {
-        this.error = '文件大小不能超过 5MB'
-        return
-      }
-      
-      if (isImage) {
-        const reader = new FileReader()
-        reader.onload = (e) => {
-          this.imagePreview = e.target.result
-        }
-        reader.readAsDataURL(file)
-      } else {
-        // For Word docs, we can show a generic icon.
-        this.imagePreview = '/images/keji.png'
-      }
-      
-      this.selectedFile = file
-      this.uploadImage()
-    },
-    
-    async uploadImage() {
-      if (!this.selectedFile) return
-      
-      this.uploading = true
-      this.uploadProgress = 0
-      this.error = null
-      
-      try {
-        const formData = new FormData()
-        formData.append('image', this.selectedFile)
-        
-        const xhr = new XMLHttpRequest()
-        
-        xhr.upload.addEventListener('progress', (event) => {
-          if (event.lengthComputable) {
-            this.uploadProgress = Math.round((event.loaded / event.total) * 100)
-          }
-        })
-        
-        const uploadPromise = new Promise((resolve, reject) => {
-          xhr.addEventListener('load', () => {
-            if (xhr.status === 200) {
-              try {
-                const result = JSON.parse(xhr.responseText)
-                resolve(result)
-              } catch (e) {
-                reject(new Error('服务器响应格式错误'))
-              }
-            } else if (xhr.status === 413) {
-              reject(new Error('文件太大，请选择小于5MB的文件'))
-            } else if (xhr.status === 415) {
-              reject(new Error('不支持的文件格式'))
-            } else {
-              reject(new Error('上传失败，服务器错误'))
-            }
-          })
-          xhr.addEventListener('error', () => reject(new Error('网络连接失败')))
-        })
-        
-        const token = localStorage.getItem('token')
-        
-        xhr.open('POST', 'http://localhost:3000/api/upload')
-        if (token) {
-          xhr.setRequestHeader('Authorization', `Bearer ${token}`)
-        }
-        xhr.send(formData)
-        
-        const result = await uploadPromise
-        
-        this.newGuide.image_url = result.imageUrl
-        // Only update preview if it's an image
-        if (this.selectedFile.type.startsWith('image/')) {
-          this.imagePreview = result.imageUrl
-        }
-        this.selectedFile = null
-        
-        console.log('✅ 文件上传成功:', result.imageUrl)
-        
-      } catch (error) {
-        console.error('❌ 文件上传失败:', error)
-        this.error = '文件上传失败: ' + error.message
-        this.removeImage()
-      } finally {
-        this.uploading = false
-        this.uploadProgress = 0
-      }
-    },
-    
-    removeImage() {
-      this.newGuide.image_url = ''
-      this.imagePreview = ''
-      this.selectedFile = null
-      if (this.$refs.fileInput) {
-        this.$refs.fileInput.value = ''
-      }
-    },
-    
-    updateImagePreview() {
-      if (this.newGuide.image_url) {
-        this.imagePreview = this.newGuide.image_url
-      } else {
-        this.imagePreview = ''
-      }
-    },
-    
-    selectExampleImage(example) {
-      this.newGuide.image_url = example.url
-      this.imagePreview = example.url
-      this.selectedFile = null
-      if (this.$refs.fileInput) {
-        this.$refs.fileInput.value = ''
-      }
-    }
   },
   watch: {
     user: {
@@ -1285,6 +1228,48 @@ export default {
   background: #3498db;
 }
 
+/* 文件预览样式 */
+.image-preview {
+  text-align: center;
+  padding: 10px;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  background: #f8f9fa;
+}
+
+.preview-img {
+  max-width: 200px;
+  max-height: 150px;
+  border-radius: 6px;
+}
+
+.file-info {
+  padding: 10px;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  background: #f8f9fa;
+}
+
+.file-name {
+  font-weight: 500;
+  margin-bottom: 5px;
+  color: #2c3e50;
+}
+
+.file-size {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.mt-1 {
+  margin-top: 5px;
+}
+
+.mt-2 {
+  margin-top: 10px;
+}
+
 /* 响应式设计 */
 @media (max-width: 768px) {
   .tab-buttons {
@@ -1341,6 +1326,10 @@ export default {
     align-items: flex-start;
     gap: 10px;
   }
+
+  .form-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* 加载和错误状态样式 */
@@ -1374,7 +1363,7 @@ export default {
   margin-bottom: 20px;
 }
 
-/* 表单样式保持不变 */
+/* 表单样式 */
 .form-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1470,146 +1459,7 @@ export default {
   font-size: 12px;
 }
 
-/* 图片上传区域样式保持不变 */
-.image-upload-section {
-  border: 2px dashed #ddd;
-  border-radius: 8px;
-  padding: 20px;
-  background: #fafafa;
-}
-
-.image-preview {
-  text-align: center;
-  margin-bottom: 15px;
-}
-
-.preview-img {
-  max-width: 300px;
-  max-height: 200px;
-  border-radius: 6px;
-  margin-bottom: 10px;
-}
-
-.file-upload-area {
-  position: relative;
-}
-
-.file-input {
-  display: none;
-}
-
-.upload-placeholder {
-  text-align: center;
-  padding: 30px;
-  border: 2px dashed #ccc;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  background: white;
-}
-
-.upload-placeholder:hover {
-  border-color: #3498db;
-  background: #f8f9fa;
-}
-
-.upload-placeholder.drag-over {
-  border-color: #3498db;
-  background: #e3f2fd;
-}
-
-.upload-icon {
-  font-size: 48px;
-  margin-bottom: 10px;
-}
-
-.upload-text {
-  font-size: 16px;
-  color: #666;
-  margin-bottom: 5px;
-}
-
-.upload-hint {
-  font-size: 12px;
-  color: #999;
-}
-
-.upload-progress {
-  margin-top: 15px;
-}
-
-.progress-bar {
-  width: 100%;
-  height: 6px;
-  background: #e0e0e0;
-  border-radius: 3px;
-  overflow: hidden;
-  margin-bottom: 5px;
-}
-
-.progress-fill {
-  height: 100%;
-  background: #3498db;
-  transition: width 0.3s ease;
-}
-
-.progress-text {
-  font-size: 12px;
-  color: #666;
-}
-
-.image-url-input {
-  margin-top: 15px;
-}
-
-.image-examples {
-  margin-top: 15px;
-}
-
-.example-title {
-  font-size: 14px;
-  color: #666;
-  margin-bottom: 10px;
-}
-
-.example-images {
-  display: flex;
-  gap: 10px;
-  overflow-x: auto;
-  padding-bottom: 10px;
-}
-
-.example-image {
-  text-align: center;
-  cursor: pointer;
-  transition: transform 0.3s ease;
-  flex-shrink: 0;
-}
-
-.example-image:hover {
-  transform: scale(1.05);
-}
-
-.example-img {
-  width: 80px;
-  height: 60px;
-  object-fit: cover;
-  border-radius: 6px;
-  border: 2px solid transparent;
-}
-
-.example-image:hover .example-img {
-  border-color: #3498db;
-}
-
-.example-name {
-  display: block;
-  font-size: 12px;
-  color: #666;
-  margin-top: 5px;
-}
-
-/* 用户卡片样式保持不变 */
+/* 用户卡片样式 */
 .user-card {
   margin-bottom: 30px;
 }
@@ -1655,11 +1505,35 @@ export default {
   padding: 40px 20px;
 }
 
-.mt-2 {
-  margin-top: 10px;
-}
-
 .text-center {
   text-align: center;
+}
+
+/* 工具类 */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+.card {
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.card-body {
+  padding: 20px;
+}
+
+.grid {
+  display: grid;
+  gap: 20px;
+}
+
+.grid-2 {
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
 }
 </style>
