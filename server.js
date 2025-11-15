@@ -72,43 +72,31 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// 为需要 JSON 的路由单独添加 JSON 解析
-const jsonRoutes = [
-  '/api/register',
-  '/api/login',
-  '/api/user/avatar',
-  '/api/guides/:id/like',
-  '/api/guides/:id/favorite',
-  '/api/users/:id/follow',
-  '/api/comments/:id/like',
-  '/api/guides/:id/comments'
-];
-
-app.use(jsonRoutes, express.json());
-app.use(express.urlencoded({ extended: true })); // 解析 URL 编码数据
+// 全局启用 JSON 和 URL 编码解析。
+// 现代 Express 的 body-parser 中间件会检查 Content-Type，
+// 当请求为 multipart/form-data 时，它们会跳过解析，让 multer 正确处理。
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // 静态文件服务 - 提供上传的图片访问
 app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
 app.use('/images', express.static(path.join(__dirname, 'public/images')));
 
 // 请求日志中间件
-app.use((req, res, next) => {
-  console.log(`📨 ${new Date().toISOString()} ${req.method} ${req.url}`);
-  if (req.method === 'POST' || req.method === 'PUT') {
-    if (req.url === '/api/upload') {
-      console.log('📦 文件上传���求');
-    } else {
-      console.log('📦 请求体:', req.body);
-    }
-  }
+
+// 用于诊断文件上传的日志中间件
+const logUploadRequest = (req, res, next) => {
+  console.log('--- NEW UPLOAD REQUEST ---');
+  console.log(`Method: ${req.method}, URL: ${req.url}`);
+  console.log('Headers:', JSON.stringify(req.headers, null, 2));
   next();
-});
+};
 
 // 发布攻略 (包含文件上传)
-// 发布攻略 (包含文件上传)
-app.post('/api/guides', authenticateToken, upload.fields([
-  { name: 'cover_image', maxCount: 1 }, 
-  { name: 'document', maxCount: 1 }
+app.post('/api/guides', logUploadRequest, authenticateToken, upload.fields([
+  { name: 'cover_image', maxCount: 1 },
+  { name: 'document', maxCount: 1 },
+  { name: 'guide_images', maxCount: 10 } // 新增：支持最多10张攻略图片
 ]), async (req, res) => {
   try {
     console.log('🔵 收到发布攻略请求');
@@ -159,10 +147,29 @@ app.post('/api/guides', authenticateToken, upload.fields([
 
     console.log('✅ 攻略插入数据库成功，ID:', result.insertId);
 
+    const guideId = result.insertId;
+
+    // 处理攻略图片
+    if (req.files && req.files['guide_images']) {
+      const guideImages = req.files['guide_images'];
+      console.log(`🖼️ 发现 ${guideImages.length} 张攻略图片，准备插入数据库...`);
+      
+      const imageInsertPromises = guideImages.map(file => {
+        const imageUrl = `/uploads/${file.filename}`;
+        return pool.query(
+          'INSERT INTO guide_images (guide_id, image_path) VALUES (?, ?)',
+          [guideId, imageUrl]
+        );
+      });
+
+      await Promise.all(imageInsertPromises);
+      console.log('✅ 所有攻略图片已成功插入数据库');
+    }
+
     res.status(201).json({
       message: '攻略发布成功',
       guide: {
-        id: result.insertId,
+        id: guideId,
         title,
         content,
         region,
@@ -314,6 +321,18 @@ async function initDatabase() {
       )
     `);
     console.log('评论表创建成功（支持多级回复）');
+
+    // 创建攻略图片表
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS guide_images (
+        image_id INT AUTO_INCREMENT PRIMARY KEY,
+        guide_id INT NOT NULL,
+        image_path VARCHAR(255) NOT NULL,
+        uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (guide_id) REFERENCES guides(id) ON DELETE CASCADE
+      )
+    `);
+    console.log('攻略图片表创建成功');
 
     // 创建评论点赞表
     await pool.query(`
@@ -1269,6 +1288,15 @@ app.get('/api/guides/:id', optionalAuthenticateToken, async (req, res) => {
       return res.status(404).json({ error: '攻略未找到' });
     }
 
+    const guide = guides[0];
+
+    // 获取攻略图片
+    const [images] = await pool.query(
+      'SELECT image_path FROM guide_images WHERE guide_id = ?',
+      [guideId]
+    );
+    guide.guide_images = images.map(img => img.image_path);
+
     // 优化评论查询：一次性获取顶级评论、回复数和当前用户的点赞状态
     const commentsQuery = `
       SELECT
@@ -1292,7 +1320,7 @@ app.get('/api/guides/:id', optionalAuthenticateToken, async (req, res) => {
     });
 
     res.json({
-      guide: guides[0],
+      guide: guide,
       comments
     });
   } catch (error) {

@@ -61,6 +61,52 @@
           </div>
         </div>
 
+        <!-- 更多图片 - 优化版 -->
+        <div v-if="guide.guide_images && guide.guide_images.length > 0" class="guide-images-gallery">
+          <h3 class="gallery-title">图集 ({{ guide.guide_images.length }})</h3>
+          <div class="gallery-container">
+            <div class="gallery-scroll-container" ref="galleryScroll" @scroll="updateScrollButtons">
+              <div class="image-grid">
+                <div 
+                  v-for="(image, index) in guide.guide_images" 
+                  :key="index" 
+                  class="grid-item" 
+                  @click="openGalleryImage(index)"
+                  :class="{ active: galleryCurrentIndex === index }"
+                >
+                  <img 
+                    :src="image" 
+                    :alt="guide.title + ' image ' + (index + 1)" 
+                    class="gallery-image"
+                    loading="lazy"
+                  >
+                  <div class="image-overlay">
+                    <span class="image-number">{{ index + 1 }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- 左右滚动按钮 -->
+            <button 
+              v-if="canScrollLeft" 
+              class="scroll-btn scroll-left" 
+              @click="scrollGallery('left')"
+              aria-label="向左滚动"
+            >
+              <span class="scroll-icon">‹</span>
+            </button>
+            <button 
+              v-if="canScrollRight" 
+              class="scroll-btn scroll-right" 
+              @click="scrollGallery('right')"
+              aria-label="向右滚动"
+            >
+              <span class="scroll-icon">›</span>
+            </button>
+          </div>
+        </div>
+
         <!-- 文档下载 -->
         <div v-if="guide.document_url" class="document-download">
           <a :href="guide.document_url" download class="btn btn-primary">
@@ -309,7 +355,7 @@
     <div v-if="showImageModal" class="image-modal" @click="closeImageModal">
       <div class="image-modal-content" @click.stop>
         <img
-          :src="guide.cover_image_url"
+          :src="modalImageUrl"
           :alt="guide.title"
           class="image-modal-img"
         />
@@ -318,6 +364,78 @@
         </button>
         <div class="image-modal-info">
           点击图片外区域或按 ESC 键关闭
+        </div>
+      </div>
+    </div>
+    
+    <!-- 图集模态框 -->
+    <div v-if="showGalleryModal" class="gallery-modal" @click="closeGalleryModal">
+      <div class="gallery-modal-content" @click.stop>
+        <div class="gallery-modal-header">
+          <span class="gallery-counter">{{ galleryCurrentIndex + 1 }} / {{ guide.guide_images.length }}</span>
+          <button class="gallery-modal-close" @click="closeGalleryModal">
+            ✕
+          </button>
+        </div>
+        
+        <div class="gallery-modal-body">
+          <div class="gallery-image-container">
+            <img
+              :src="currentGalleryImage"
+              :alt="guide.title + ' image ' + (galleryCurrentIndex + 1)"
+              class="gallery-modal-img"
+              @load="handleGalleryImageLoad"
+              @error="handleGalleryImageError"
+            />
+            
+            <!-- 加载状态 -->
+            <div v-if="galleryImageLoading" class="gallery-image-loading">
+              <div class="loading-spinner"></div>
+              <p>图片加载中...</p>
+            </div>
+            
+            <!-- 错误状态 -->
+            <div v-if="galleryImageError" class="gallery-image-error">
+              <div class="error-icon">🖼️</div>
+              <p>图片加载失败</p>
+              <button class="retry-btn" @click="retryLoadGalleryImage">重新加载</button>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 导航按钮 -->
+        <button 
+          v-if="galleryCurrentIndex > 0"
+          class="gallery-nav-btn gallery-prev"
+          @click="prevGalleryImage"
+          aria-label="上一张"
+        >
+          <span class="nav-icon">‹</span>
+        </button>
+        <button 
+          v-if="galleryCurrentIndex < guide.guide_images.length - 1"
+          class="gallery-nav-btn gallery-next"
+          @click="nextGalleryImage"
+          aria-label="下一张"
+        >
+          <span class="nav-icon">›</span>
+        </button>
+        
+        <!-- 缩略图导航 -->
+        <div class="gallery-thumbnails">
+          <div 
+            v-for="(image, index) in guide.guide_images" 
+            :key="index" 
+            class="thumbnail-item"
+            :class="{ active: galleryCurrentIndex === index }"
+            @click="goToGalleryImage(index)"
+          >
+            <img 
+              :src="image" 
+              :alt="guide.title + ' thumbnail ' + (index + 1)" 
+              class="thumbnail-image"
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -350,7 +468,16 @@ export default {
       imageLoading: false,
       imageError: false,
       showImageModal: false,
-      imageNaturalSize: { width: 0, height: 0 }
+      modalImageUrl: null,
+      imageNaturalSize: { width: 0, height: 0 },
+      
+      // 图集相关数据
+      galleryCurrentIndex: 0,
+      showGalleryModal: false,
+      galleryImageLoading: false,
+      galleryImageError: false,
+      canScrollLeft: false,
+      canScrollRight: false
     }
   },
   computed: {
@@ -393,10 +520,22 @@ export default {
         return '';
       }
       return `${this.imageNaturalSize.width} × ${this.imageNaturalSize.height}`;
+    },
+    
+    currentGalleryImage() {
+      if (!this.guide || !this.guide.guide_images || this.guide.guide_images.length === 0) {
+        return '';
+      }
+      return this.guide.guide_images[this.galleryCurrentIndex];
     }
   },
   mounted() {
-    this.fetchGuideDetail()
+    this.fetchGuideDetail();
+    // 监听窗口大小变化，更新滚动按钮状态
+    window.addEventListener('resize', this.updateScrollButtons);
+  },
+  beforeUnmount() {
+    window.removeEventListener('resize', this.updateScrollButtons);
   },
   methods: {
     async fetchGuideDetail() {
@@ -433,7 +572,12 @@ export default {
           }
           
           // 加载评论
-          await this.loadComments(response.comments)
+          await this.loadComments(response.comments);
+          
+          // 更新图集滚动按钮状态
+          this.$nextTick(() => {
+            this.updateScrollButtons();
+          });
         } else {
           throw new Error('攻略未找到')
         }
@@ -907,13 +1051,20 @@ export default {
       }
     },
 
-    zoomImage() {
+    openImageInModal(imageUrl) {
+      if (!imageUrl) return;
+      this.modalImageUrl = imageUrl;
       this.showImageModal = true;
       document.addEventListener('keydown', this.handleKeydown);
     },
 
+    zoomImage() {
+      this.openImageInModal(this.guide.cover_image_url);
+    },
+
     closeImageModal() {
       this.showImageModal = false;
+      this.modalImageUrl = null;
       document.removeEventListener('keydown', this.handleKeydown);
     },
 
@@ -928,6 +1079,104 @@ export default {
       link.href = this.guide.cover_image_url;
       link.download = `guide-image-${this.guide.id}.jpg`;
       link.click();
+    },
+
+    // 图集相关方法
+    openGalleryImage(index) {
+      this.galleryCurrentIndex = index;
+      this.showGalleryModal = true;
+      this.galleryImageLoading = true;
+      this.galleryImageError = false;
+      document.addEventListener('keydown', this.handleGalleryKeydown);
+    },
+
+    closeGalleryModal() {
+      this.showGalleryModal = false;
+      document.removeEventListener('keydown', this.handleGalleryKeydown);
+    },
+
+    handleGalleryKeydown(event) {
+      if (event.key === 'Escape') {
+        this.closeGalleryModal();
+      } else if (event.key === 'ArrowLeft') {
+        this.prevGalleryImage();
+      } else if (event.key === 'ArrowRight') {
+        this.nextGalleryImage();
+      }
+    },
+
+    prevGalleryImage() {
+      if (this.galleryCurrentIndex > 0) {
+        this.galleryCurrentIndex--;
+        this.galleryImageLoading = true;
+        this.galleryImageError = false;
+      }
+    },
+
+    nextGalleryImage() {
+      if (this.guide && this.guide.guide_images && 
+          this.galleryCurrentIndex < this.guide.guide_images.length - 1) {
+        this.galleryCurrentIndex++;
+        this.galleryImageLoading = true;
+        this.galleryImageError = false;
+      }
+    },
+
+    goToGalleryImage(index) {
+      this.galleryCurrentIndex = index;
+      this.galleryImageLoading = true;
+      this.galleryImageError = false;
+    },
+
+    handleGalleryImageLoad() {
+      this.galleryImageLoading = false;
+      this.galleryImageError = false;
+    },
+
+    handleGalleryImageError() {
+      this.galleryImageLoading = false;
+      this.galleryImageError = true;
+    },
+
+    retryLoadGalleryImage() {
+      this.galleryImageLoading = true;
+      this.galleryImageError = false;
+    },
+
+    // 图集滚动方法
+    scrollGallery(direction) {
+      const scrollContainer = this.$refs.galleryScroll;
+      if (!scrollContainer) return;
+      
+      const scrollAmount = 300; // 每次滚动的像素数
+      const currentScroll = scrollContainer.scrollLeft;
+      
+      if (direction === 'left') {
+        scrollContainer.scrollTo({
+          left: currentScroll - scrollAmount,
+          behavior: 'smooth'
+        });
+      } else {
+        scrollContainer.scrollTo({
+          left: currentScroll + scrollAmount,
+          behavior: 'smooth'
+        });
+      }
+      
+      // 更新滚动按钮状态
+      this.$nextTick(() => {
+        this.updateScrollButtons();
+      });
+    },
+
+    updateScrollButtons() {
+      const scrollContainer = this.$refs.galleryScroll;
+      if (!scrollContainer) return;
+      
+      this.canScrollLeft = scrollContainer.scrollLeft > 0;
+      this.canScrollRight = 
+        scrollContainer.scrollLeft < 
+        (scrollContainer.scrollWidth - scrollContainer.clientWidth);
     },
 
     goBack() {
@@ -2272,6 +2521,397 @@ export default {
   border-left: 4px solid #e74c3c;
 }
 
+/* 图集样式 - 优化版 */
+.guide-images-gallery {
+  margin: 40px 0;
+  padding-top: 30px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.gallery-title {
+  font-size: 1.6em;
+  font-weight: 700;
+  color: #2c3e50;
+  margin-bottom: 25px;
+  text-align: center;
+  position: relative;
+  padding-bottom: 10px;
+}
+
+.gallery-title::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 50px;
+  height: 2px;
+  background: linear-gradient(90deg, #3498db, #9b59b6);
+}
+
+.gallery-container {
+  position: relative;
+  margin: 0 auto;
+  overflow: hidden;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #f8f9fa, #ffffff);
+  padding: 20px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+}
+
+.gallery-scroll-container {
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e0 #f7fafc;
+  padding-bottom: 10px;
+}
+
+.gallery-scroll-container::-webkit-scrollbar {
+  height: 6px;
+}
+
+.gallery-scroll-container::-webkit-scrollbar-track {
+  background: #f7fafc;
+  border-radius: 3px;
+}
+
+.gallery-scroll-container::-webkit-scrollbar-thumb {
+  background: #cbd5e0;
+  border-radius: 3px;
+}
+
+.gallery-scroll-container::-webkit-scrollbar-thumb:hover {
+  background: #a0aec0;
+}
+
+.image-grid {
+  display: flex;
+  gap: 15px;
+  padding: 5px;
+  width: max-content;
+}
+
+.grid-item {
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+  box-shadow: 0 5px 20px rgba(0,0,0,0.08);
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  cursor: pointer;
+  flex-shrink: 0;
+  width: 180px;
+  height: 180px;
+}
+
+.grid-item:hover {
+  transform: translateY(-8px) scale(1.05);
+  box-shadow: 0 12px 30px rgba(0,0,0,0.15);
+}
+
+.grid-item.active {
+  border: 3px solid #3498db;
+  box-shadow: 0 8px 25px rgba(52, 152, 219, 0.3);
+}
+
+.gallery-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.grid-item:hover .gallery-image {
+  transform: scale(1.1);
+}
+
+.image-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(to top, rgba(0,0,0,0.4) 0%, transparent 50%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+  padding: 12px;
+}
+
+.grid-item:hover .image-overlay {
+  opacity: 1;
+}
+
+.image-number {
+  color: white;
+  font-weight: 600;
+  font-size: 14px;
+  background: rgba(0,0,0,0.6);
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+/* 滚动按钮 */
+.scroll-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  border: none;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  z-index: 10;
+  backdrop-filter: blur(5px);
+}
+
+.scroll-btn:hover {
+  background: white;
+  transform: translateY(-50%) scale(1.1);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.2);
+}
+
+.scroll-btn:active {
+  transform: translateY(-50%) scale(0.95);
+}
+
+.scroll-left {
+  left: 10px;
+}
+
+.scroll-right {
+  right: 10px;
+}
+
+.scroll-icon {
+  font-size: 20px;
+  font-weight: bold;
+  color: #2c3e50;
+}
+
+/* 图集模态框 - 自适应屏幕优化 */
+.gallery-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.95);
+  backdrop-filter: blur(5px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 4000;
+  opacity: 0;
+  animation: fadeIn 0.3s ease forwards;
+}
+
+.gallery-modal-content {
+  width: 95%;
+  max-width: 95vw;
+  height: 95%;
+  max-height: 95vh;
+  background: #1a1a1a;
+  border-radius: 16px;
+  overflow: hidden;
+  position: relative;
+  transform: scale(0.9);
+  animation: zoomIn 0.3s ease 0.1s forwards;
+  display: flex;
+  flex-direction: column;
+}
+
+.gallery-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 30px;
+  background: rgba(0, 0, 0, 0.8);
+  border-bottom: 1px solid #333;
+  flex-shrink: 0;
+}
+
+.gallery-counter {
+  color: white;
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.gallery-modal-close {
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: white;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 20px;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
+}
+
+.gallery-modal-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: rotate(90deg);
+}
+
+.gallery-modal-body {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 30px;
+  position: relative;
+  overflow: hidden;
+}
+
+.gallery-image-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.gallery-modal-img {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  transition: transform 0.3s ease;
+}
+
+/* 图集导航按钮 */
+.gallery-nav-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  border: none;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  z-index: 10;
+  backdrop-filter: blur(10px);
+  font-size: 24px;
+}
+
+.gallery-nav-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: translateY(-50%) scale(1.1);
+}
+
+.gallery-nav-btn:active {
+  transform: translateY(-50%) scale(0.95);
+}
+
+.gallery-prev {
+  left: 30px;
+}
+
+.gallery-next {
+  right: 30px;
+}
+
+.nav-icon {
+  font-weight: bold;
+}
+
+/* 图集缩略图导航 */
+.gallery-thumbnails {
+  display: flex;
+  gap: 10px;
+  padding: 20px 30px;
+  background: rgba(0, 0, 0, 0.8);
+  border-top: 1px solid #333;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex-shrink: 0;
+}
+
+.gallery-thumbnails::-webkit-scrollbar {
+  display: none;
+}
+
+.thumbnail-item {
+  width: 60px;
+  height: 60px;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: all 0.3s ease;
+  flex-shrink: 0;
+  border: 2px solid transparent;
+}
+
+.thumbnail-item:hover {
+  opacity: 0.8;
+  transform: scale(1.05);
+}
+
+.thumbnail-item.active {
+  opacity: 1;
+  border-color: #3498db;
+  transform: scale(1.1);
+}
+
+.thumbnail-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* 图集图片加载状态 */
+.gallery-image-loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  gap: 15px;
+}
+
+.gallery-image-error {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  gap: 12px;
+  text-align: center;
+}
+
 /* 响应式优化 */
 @media (max-width: 768px) {
   .guide-title {
@@ -2336,6 +2976,51 @@ export default {
     top: 10px;
     right: 10px;
   }
+  
+  /* 移动端图集优化 */
+  .grid-item {
+    width: 150px;
+    height: 150px;
+  }
+  
+  .gallery-nav-btn {
+    width: 50px;
+    height: 50px;
+    font-size: 20px;
+  }
+  
+  .gallery-prev {
+    left: 15px;
+  }
+  
+  .gallery-next {
+    right: 15px;
+  }
+  
+  .gallery-modal-body {
+    padding: 15px;
+  }
+  
+  .thumbnail-item {
+    width: 50px;
+    height: 50px;
+  }
+  
+  /* 移动端图集模态框优化 */
+  .gallery-modal-content {
+    width: 98%;
+    height: 98%;
+    max-width: 98vw;
+    max-height: 98vh;
+  }
+  
+  .gallery-modal-header {
+    padding: 15px 20px;
+  }
+  
+  .gallery-thumbnails {
+    padding: 15px 20px;
+  }
 }
 
 @media (max-width: 480px) {
@@ -2379,6 +3064,85 @@ export default {
   .image-info {
     font-size: 10px;
     padding: 4px 8px;
+  }
+  
+  /* 移动端图集优化 */
+  .grid-item {
+    width: 120px;
+    height: 120px;
+  }
+  
+  .gallery-container {
+    padding: 15px;
+  }
+  
+  .gallery-nav-btn {
+    width: 40px;
+    height: 40px;
+    font-size: 18px;
+  }
+  
+  .gallery-prev {
+    left: 10px;
+  }
+  
+  .gallery-next {
+    right: 10px;
+  }
+  
+  .thumbnail-item {
+    width: 40px;
+    height: 40px;
+  }
+  
+  .gallery-thumbnails {
+    padding: 15px 20px;
+  }
+}
+
+/* 大屏幕优化 */
+@media (min-width: 1200px) {
+  .gallery-modal-content {
+    max-width: 1200px;
+    max-height: 90vh;
+  }
+  
+  .gallery-modal-img {
+    max-width: 90%;
+    max-height: 90%;
+  }
+}
+
+/* 超大屏幕优化 */
+@media (min-width: 1600px) {
+  .gallery-modal-content {
+    max-width: 1400px;
+  }
+  
+  .gallery-modal-img {
+    max-width: 85%;
+    max-height: 85%;
+  }
+}
+
+/* 横屏优化 */
+@media (max-height: 600px) and (orientation: landscape) {
+  .gallery-modal-content {
+    height: 98vh;
+    max-height: 98vh;
+  }
+  
+  .gallery-modal-body {
+    padding: 15px;
+  }
+  
+  .gallery-thumbnails {
+    padding: 10px 15px;
+  }
+  
+  .thumbnail-item {
+    width: 50px;
+    height: 50px;
   }
 }
 </style>

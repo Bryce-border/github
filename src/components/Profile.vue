@@ -139,6 +139,28 @@
                 </div>
                 
                 <div class="form-group">
+                  <label for="guideImages">攻略图片 (可多选)</label>
+                  <input
+                    type="file"
+                    id="guideImages"
+                    ref="guideImagesInput"
+                    class="form-control"
+                    accept="image/*"
+                    multiple
+                    @change="handleGuideImagesSelect"
+                  >
+                  <!-- 攻略图片预览 -->
+                  <div v-if="guideImagePreviews.length > 0" class="image-previews mt-2">
+                    <div v-for="(preview, index) in guideImagePreviews" :key="index" class="image-preview-item">
+                      <img :src="preview" alt="攻略图片预览" class="preview-img">
+                      <button type="button" class="btn btn-danger btn-sm mt-1" @click="removeGuideImage(index)">
+                        移除
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="form-group">
                   <label for="guideContent">攻略内容 *</label>
                   <textarea
                     id="guideContent"
@@ -454,6 +476,8 @@ export default {
       coverImageFile: null,
       coverImagePreview: null,
       documentFile: null,
+      guideImageFiles: [],
+      guideImagePreviews: [],
       newGuide: {
         title: '',
         content: '',
@@ -631,6 +655,14 @@ async publishGuide() {
       formData.append('document', this.documentFile);
     }
 
+    // 添加攻略图片
+    if (this.guideImageFiles.length > 0) {
+      console.log(`🖼️ 添加 ${this.guideImageFiles.length} 张攻略图片`);
+      this.guideImageFiles.forEach(file => {
+        formData.append('guide_images', file);
+      });
+    }
+
     console.log('🚀 发送POST请求到 /api/guides');
     
     // 直接发送请求，不使用 $api 包装器，以便获取原始响应
@@ -789,6 +821,45 @@ handleDocumentSelect(event) {
   }
 },
     
+    // 处理攻略图片选择
+    handleGuideImagesSelect(event) {
+      const files = event.target.files;
+      if (files) {
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          
+          // 验证文件类型
+          if (!file.type.startsWith('image/')) {
+            this.error = '请选择图片文件';
+            continue;
+          }
+          
+          // 验证文件大小 (5MB)
+          if (file.size > 5 * 1024 * 1024) {
+            this.error = `图片 ${file.name} 大小不能超过5MB`;
+            continue;
+          }
+          
+          this.guideImageFiles.push(file);
+          
+          // 创建预览
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            this.guideImagePreviews.push(e.target.result);
+          };
+          reader.readAsDataURL(file);
+        }
+        // 清空input的值，以便可以再次选择相同的文件
+        event.target.value = '';
+      }
+    },
+
+    // 移除单张攻略图片
+    removeGuideImage(index) {
+      this.guideImageFiles.splice(index, 1);
+      this.guideImagePreviews.splice(index, 1);
+    },
+
     // 移除封面图片
     removeCoverImage() {
       this.coverImageFile = null;
@@ -824,6 +895,11 @@ handleDocumentSelect(event) {
       };
       this.removeCoverImage();
       this.removeDocument();
+      this.guideImageFiles = [];
+      this.guideImagePreviews = [];
+      if (this.$refs.guideImagesInput) {
+        this.$refs.guideImagesInput.value = '';
+      }
       this.error = null;
     },
     
@@ -1229,6 +1305,20 @@ handleDocumentSelect(event) {
 }
 
 /* 文件预览样式 */
+.image-previews {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  background: #f8f9fa;
+}
+
+.image-preview-item {
+  text-align: center;
+}
+
 .image-preview {
   text-align: center;
   padding: 10px;
