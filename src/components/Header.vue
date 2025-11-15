@@ -14,8 +14,8 @@
         <!-- 左侧：Logo和首页 -->
         <div class="header-left">
           <div class="logo" @click="goHome">
-            <h1>🌱 旅行攻略</h1>
-            <span class="tagline">来一场说走就走的旅行吧！</span>
+            <h1>🌱 途间纪年</h1>
+            <span class="tagline">踏遍山河褶皱，把岁月写成不褪色的旅途诗！</span>
           </div>
         </div>
         
